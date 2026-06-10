@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.python-version
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Environments and secrets
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Local generated F1 artifacts
+data/cache/
+data/models/
+data/processed/
+data/raw/
+data/metrics/
+
+# Vercel and local tooling
+.vercel/
+.DS_Store
+Thumbs.db
+*.log
+*.tmp

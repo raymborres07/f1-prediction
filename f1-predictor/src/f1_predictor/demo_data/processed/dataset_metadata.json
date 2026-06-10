@@ -1,0 +1,44 @@
+{
+  "dataset_version": "20260610142123",
+  "built_at_utc": "2026-06-10T14:21:23Z",
+  "tables": {
+    "races": {
+      "rows": 958,
+      "path": "E:\\Portfolio\\f1-prediction\\f1-predictor\\data\\processed\\races.parquet"
+    },
+    "qualifying": {
+      "rows": 959,
+      "path": "E:\\Portfolio\\f1-prediction\\f1-predictor\\data\\processed\\qualifying.parquet"
+    },
+    "drivers": {
+      "rows": 31,
+      "path": "E:\\Portfolio\\f1-prediction\\f1-predictor\\data\\processed\\drivers.parquet"
+    },
+    "constructors": {
+      "rows": 11,
+      "path": "E:\\Portfolio\\f1-prediction\\f1-predictor\\data\\processed\\constructors.parquet"
+    },
+    "modeling_table": {
+      "rows": 958,
+      "path": "E:\\Portfolio\\f1-prediction\\f1-predictor\\data\\processed\\modeling_table.parquet"
+    }
+  },
+  "feature_columns": [
+    "grid_position",
+    "qualifying_position",
+    "qualifying_gap_to_pole",
+    "teammate_quali_delta",
+    "driver_last3_avg_finish",
+    "driver_last5_avg_finish",
+    "driver_last3_podium_rate",
+    "driver_last5_top10_rate",
+    "constructor_last3_avg_finish",
+    "constructor_last5_avg_finish",
+    "constructor_last5_podium_rate",
+    "driver_circuit_avg_finish",
+    "driver_circuit_podium_rate",
+    "driver_dnf_rate",
+    "constructor_dnf_rate",
+    "has_quali_data"
+  ]
+}

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>F1 Predictor</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="header">
+        <div>
+          <p class="eyebrow">Next race model</p>
+          <h1>F1 Predictor</h1>
+        </div>
+        <div class="actions">
+          <button id="model-card-open" class="secondary" type="button">Model Card</button>
+          <button id="refresh" type="button">Refresh</button>
+        </div>
+      </section>
+
+      <section class="race-strip" id="race">
+        <span>Loading race</span>
+      </section>
+
+      <section class="meta-strip" id="metadata">
+        <span>Loading model metadata</span>
+      </section>
+
+      <section class="panel-grid">
+        <section class="panel">
+          <h2>Backtest Metrics</h2>
+          <div class="metric-grid" id="metrics">
+            <span>Loading metrics</span>
+          </div>
+        </section>
+        <section class="panel">
+          <h2>Podium Reliability</h2>
+          <div class="reliability" id="reliability">
+            <span>Loading calibration</span>
+          </div>
+        </section>
+        <section class="panel">
+          <h2>Weak Windows</h2>
+          <div class="diagnostics" id="diagnostics">
+            <span>Loading diagnostics</span>
+          </div>
+        </section>
+      </section>
+
+      <section class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Driver</th>
+              <th>Team</th>
+              <th>Grid</th>
+              <th>Win</th>
+              <th>Podium</th>
+              <th>Top 10</th>
+              <th>Expected Finish</th>
+              <th>Why</th>
+              <th>Freshness</th>
+            </tr>
+          </thead>
+          <tbody id="predictions">
+            <tr>
+              <td colspan="10">Loading predictions</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <p class="status" id="status"></p>
+    </main>
+
+    <dialog id="model-card" class="model-card">
+      <div class="drawer-header">
+        <div>
+          <p class="eyebrow">Model card</p>
+          <h2>Baseline race forecast</h2>
+        </div>
+        <button id="model-card-close" class="secondary" type="button">Close</button>
+      </div>
+      <div id="model-card-body" class="model-card-body">
+        Loading model card
+      </div>
+    </dialog>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
