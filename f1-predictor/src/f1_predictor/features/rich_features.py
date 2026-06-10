@@ -12,6 +12,7 @@ from f1_predictor.settings import (
     GRID_ENTRIES_TABLE_PATH,
     LAP_TIMES_TABLE_PATH,
     PIT_STOPS_TABLE_PATH,
+    PRACTICE_FEATURES_TABLE_PATH,
     PRE_RACE_FEATURES_TABLE_PATH,
     RACE_SIM_INPUTS_TABLE_PATH,
     RICH_DATASET_METADATA_PATH,
@@ -22,6 +23,7 @@ from f1_predictor.settings import (
     STINT_SUMMARIES_TABLE_PATH,
     TELEMETRY_AGGREGATES_TABLE_PATH,
     TYRE_USAGE_TABLE_PATH,
+    UPGRADE_FEATURES_TABLE_PATH,
     ensure_directories,
 )
 
@@ -49,6 +51,23 @@ PRE_RACE_FEATURE_COLUMNS = [
     "telemetry_speed_mean",
     "telemetry_throttle_mean",
     "telemetry_brake_mean",
+    "practice_single_lap_pace",
+    "practice_long_run_pace",
+    "practice_lap_count",
+    "practice_stint_consistency",
+    "practice_sector_delta",
+    "practice_speed_trap_max",
+    "practice_teammate_single_lap_delta",
+    "practice_teammate_long_run_delta",
+    "upgrade_present",
+    "upgrade_scope",
+    "aero_update",
+    "floor_update",
+    "front_wing_update",
+    "rear_wing_update",
+    "suspension_update",
+    "cooling_update",
+    "estimated_upgrade_intensity",
 ]
 
 
@@ -183,6 +202,8 @@ def build_rich_features() -> tuple[pd.DataFrame, pd.DataFrame]:
     pit_stops = _read(PIT_STOPS_TABLE_PATH)
     conditions = _read(SESSION_CONDITIONS_TABLE_PATH)
     telemetry = _read(TELEMETRY_AGGREGATES_TABLE_PATH)
+    practice = _read(PRACTICE_FEATURES_TABLE_PATH)
+    upgrades = _read(UPGRADE_FEATURES_TABLE_PATH)
     if race_results.empty:
         raise FileNotFoundError("Missing rich race_results.parquet. Run f1_predictor.ingest.rich_pipeline first.")
 
@@ -234,6 +255,8 @@ def build_rich_features() -> tuple[pd.DataFrame, pd.DataFrame]:
         if not aux.empty:
             keys = [column for column in ("season", "round", "driver_number") if column in aux.columns]
             features = features.merge(aux, on=keys, how="left")
+    features = _merge_practice_features(features, practice)
+    features = _merge_upgrade_features(features, upgrades)
 
     for column in PRE_RACE_FEATURE_COLUMNS:
         if column not in features.columns:
@@ -306,6 +329,52 @@ def _build_race_sim_inputs(
             converted = pd.to_numeric(sim[column], errors="coerce")
             sim[column] = converted if converted.notna().any() else sim[column]
     return sim
+
+
+def _merge_practice_features(features: pd.DataFrame, practice: pd.DataFrame) -> pd.DataFrame:
+    if practice.empty:
+        return features
+    required = {"season", "round", "driver_number"}
+    if not required.issubset(practice.columns):
+        return features
+    practice_numeric = practice.copy()
+    for column in practice_numeric.columns:
+        if column not in {"driver_code", "constructor_name", "session_name", "published_cutoff"}:
+            converted = pd.to_numeric(practice_numeric[column], errors="coerce")
+            practice_numeric[column] = converted if converted.notna().any() else practice_numeric[column]
+    agg = practice_numeric.groupby(["season", "round", "driver_number"], dropna=False).agg(
+        practice_single_lap_pace=("single_lap_pace", "min"),
+        practice_long_run_pace=("long_run_pace", "mean"),
+        practice_lap_count=("practice_lap_count", "sum"),
+        practice_stint_consistency=("stint_consistency", "mean"),
+        practice_sector_delta=("single_lap_pace_gap_to_session_best", "mean"),
+        practice_speed_trap_max=("speed_trap_max", "max"),
+        practice_teammate_single_lap_delta=("teammate_single_lap_delta", "mean"),
+        practice_teammate_long_run_delta=("teammate_long_run_delta", "mean"),
+    ).reset_index()
+    return features.merge(agg, on=["season", "round", "driver_number"], how="left")
+
+
+def _merge_upgrade_features(features: pd.DataFrame, upgrades: pd.DataFrame) -> pd.DataFrame:
+    if upgrades.empty:
+        return features
+    keys = ["season", "round", "constructor_name"]
+    if not set(keys).issubset(upgrades.columns):
+        return features
+    keep = [
+        *keys,
+        "upgrade_present",
+        "upgrade_scope",
+        "aero_update",
+        "floor_update",
+        "front_wing_update",
+        "rear_wing_update",
+        "suspension_update",
+        "cooling_update",
+        "estimated_upgrade_intensity",
+    ]
+    available = [column for column in keep if column in upgrades.columns]
+    return features.merge(upgrades[available], on=keys, how="left")
 
 
 def parse_args() -> argparse.Namespace:

@@ -16,6 +16,7 @@ METRICS_DIR = DATA_DIR / "metrics"
 FASTF1_RAW_DIR = RAW_DIR / "fastf1"
 OPENF1_RAW_DIR = RAW_DIR / "openf1"
 RICH_PROCESSED_DIR = PROCESSED_DIR / "rich"
+SIMULATIONS_DIR = RICH_PROCESSED_DIR / "simulations"
 DEMO_PROCESSED_DIR = DEMO_DATA_DIR / "processed"
 DEMO_MODEL_DIR = DEMO_DATA_DIR / "models"
 DEMO_METRICS_DIR = DEMO_DATA_DIR / "metrics"
@@ -55,6 +56,12 @@ SESSION_CONDITIONS_TABLE_PATH = RICH_PROCESSED_DIR / "session_conditions.parquet
 TELEMETRY_AGGREGATES_TABLE_PATH = RICH_PROCESSED_DIR / "telemetry_aggregates.parquet"
 PRE_RACE_FEATURES_TABLE_PATH = RICH_PROCESSED_DIR / "pre_race_features.parquet"
 RACE_SIM_INPUTS_TABLE_PATH = RICH_PROCESSED_DIR / "race_sim_inputs.parquet"
+PRACTICE_FEATURES_TABLE_PATH = RICH_PROCESSED_DIR / "practice_features.parquet"
+UPGRADE_NEWS_TABLE_PATH = RICH_PROCESSED_DIR / "upgrade_news.parquet"
+UPGRADE_FEATURES_TABLE_PATH = RICH_PROCESSED_DIR / "upgrade_features.parquet"
+SIMULATION_SUMMARY_PATH = SIMULATIONS_DIR / "simulation_summary.parquet"
+SIMULATION_DISTRIBUTIONS_PATH = SIMULATIONS_DIR / "finish_distributions.parquet"
+SIMULATION_METADATA_PATH = SIMULATIONS_DIR / "simulation_metadata.json"
 RICH_DATASET_METADATA_PATH = RICH_PROCESSED_DIR / "dataset_metadata.json"
 
 DEMO_SCHEDULE_PATH = DEMO_PROCESSED_DIR / "schedule.parquet"
@@ -83,6 +90,7 @@ def ensure_directories() -> None:
         OPENF1_RAW_DIR,
         PROCESSED_DIR,
         RICH_PROCESSED_DIR,
+        SIMULATIONS_DIR,
         MODEL_DIR,
         METRICS_DIR,
     ):

@@ -22,6 +22,9 @@ from f1_predictor.settings import (
     MODEL_BUNDLE_PATH,
     MODEL_METADATA_PATH,
     SCHEDULE_PATH,
+    SIMULATION_DISTRIBUTIONS_PATH,
+    SIMULATION_METADATA_PATH,
+    SIMULATION_SUMMARY_PATH,
     readable_path,
 )
 
@@ -69,6 +72,48 @@ def _records(df: pd.DataFrame) -> list[dict[str, object]]:
     for column in ("expected_finish", "finish_low", "finish_high"):
         payload[column] = payload[column].round(2)
     return payload.where(pd.notna(payload), None).to_dict(orient="records")
+
+
+def _simulation_records(df: pd.DataFrame) -> list[dict[str, object]]:
+    payload = df.copy()
+    for column in ("win_probability", "podium_probability", "top10_probability"):
+        if column in payload:
+            payload[column] = pd.to_numeric(payload[column], errors="coerce").round(4)
+    if "expected_finish" in payload:
+        payload["expected_finish"] = pd.to_numeric(payload["expected_finish"], errors="coerce").round(2)
+    return payload.where(pd.notna(payload), None).to_dict(orient="records")
+
+
+def _simulation_payload(season: int | None = None, round_number: int | None = None) -> dict[str, object]:
+    if not SIMULATION_SUMMARY_PATH.exists():
+        raise HTTPException(status_code=404, detail="Run f1-simulate first to generate Monte Carlo outputs.")
+    summary = pd.read_parquet(SIMULATION_SUMMARY_PATH)
+    distributions = pd.read_parquet(SIMULATION_DISTRIBUTIONS_PATH) if SIMULATION_DISTRIBUTIONS_PATH.exists() else pd.DataFrame()
+    metadata = json.loads(SIMULATION_METADATA_PATH.read_text(encoding="utf-8")) if SIMULATION_METADATA_PATH.exists() else {}
+    if season is None or round_number is None:
+        if summary.empty:
+            raise HTTPException(status_code=404, detail="Simulation summary is empty.")
+        latest = summary[["season", "round"]].drop_duplicates().sort_values(["season", "round"]).iloc[-1]
+        season, round_number = int(latest["season"]), int(latest["round"])
+    event_summary = summary[(summary["season"] == season) & (summary["round"] == round_number)].copy()
+    event_distributions = (
+        distributions[(distributions["season"] == season) & (distributions["round"] == round_number)].copy()
+        if not distributions.empty
+        else pd.DataFrame()
+    )
+    if event_summary.empty:
+        raise HTTPException(status_code=404, detail=f"No simulation outputs for {season} round {round_number}.")
+    race = {
+        "year": season,
+        "round": round_number,
+        "simulations": int(event_summary["simulations"].max()) if "simulations" in event_summary else metadata.get("simulations"),
+    }
+    return {
+        "race": race,
+        "metadata": metadata,
+        "predictions": _simulation_records(event_summary),
+        "finish_distributions": _simulation_records(event_distributions) if not event_distributions.empty else [],
+    }
 
 
 def _metadata(predictions: pd.DataFrame | None = None) -> dict[str, object]:
@@ -124,6 +169,7 @@ def health() -> dict[str, object]:
         "has_dataset_metadata": readable_path(DATASET_METADATA_PATH, DEMO_DATASET_METADATA_PATH).exists(),
         "has_calibration_report": readable_path(CALIBRATION_REPORT_PATH, DEMO_CALIBRATION_REPORT_PATH).exists(),
         "has_backtest_metrics": readable_path(BACKTEST_METRICS_PATH, DEMO_BACKTEST_METRICS_PATH).exists(),
+        "has_simulation_summary": SIMULATION_SUMMARY_PATH.exists(),
     }
 
 
@@ -161,6 +207,16 @@ def predictions_for_race(year: int, round_number: int) -> dict[str, object]:
         "event_name": predictions["event_name"].dropna().iloc[0] if predictions["event_name"].notna().any() else None,
     }
     return {"race": race, "metadata": _metadata(predictions), "predictions": _records(predictions)}
+
+
+@app.get("/api/simulations/latest")
+def latest_simulation() -> dict[str, object]:
+    return _simulation_payload()
+
+
+@app.get("/api/simulations/{year}/{round_number}")
+def simulation_for_race(year: int, round_number: int) -> dict[str, object]:
+    return _simulation_payload(year, round_number)
 
 
 @app.get("/api/reports/podium-calibration")

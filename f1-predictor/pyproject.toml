@@ -38,8 +38,11 @@ f1_predictor = [
 [project.scripts]
 f1-ingest = "f1_predictor.ingest.pipeline:main"
 f1-ingest-rich = "f1_predictor.ingest.rich_pipeline:main"
+f1-upgrade-news = "f1_predictor.ingest.upgrade_news:main"
 f1-features = "f1_predictor.features.pipeline:main"
 f1-features-rich = "f1_predictor.features.rich_features:main"
+f1-practice-features = "f1_predictor.features.practice_features:main"
+f1-simulate = "f1_predictor.simulations.monte_carlo:main"
 f1-train = "f1_predictor.models.train:main"
 f1-backtest = "f1_predictor.models.backtest:main"
 f1-predict-next = "f1_predictor.models.predict:main"

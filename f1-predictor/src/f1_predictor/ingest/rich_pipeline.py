@@ -117,6 +117,7 @@ def _fastf1_schedule(years: Iterable[int], version: str) -> tuple[pd.DataFrame, 
 def _fastf1_results_and_laps(events: pd.DataFrame, version: str, include_laps: bool = True) -> dict[str, pd.DataFrame]:
     race_results: list[pd.DataFrame] = []
     qualifying: list[pd.DataFrame] = []
+    practice_results: list[pd.DataFrame] = []
     lap_times: list[pd.DataFrame] = []
     weather: list[pd.DataFrame] = []
 
@@ -125,8 +126,8 @@ def _fastf1_results_and_laps(events: pd.DataFrame, version: str, include_laps: b
     for _, event in completed.iterrows():
         year = int(event["season"])
         round_number = int(event["round"])
-        for code, sink in (("R", race_results), ("Q", qualifying)):
-            session = _session_safe(year, round_number, code, load_laps=include_laps and code == "R", load_weather=True)
+        for code, sink in (("FP1", practice_results), ("FP2", practice_results), ("FP3", practice_results), ("R", race_results), ("Q", qualifying)):
+            session = _session_safe(year, round_number, code, load_laps=include_laps and code in {"FP1", "FP2", "FP3", "R"}, load_weather=True)
             if session is None:
                 continue
             results = _clean_results(session.results)
@@ -135,10 +136,11 @@ def _fastf1_results_and_laps(events: pd.DataFrame, version: str, include_laps: b
                 results.insert(0, "round", round_number)
                 results.insert(0, "season", year)
                 sink.append(results)
-            if code == "R" and include_laps and hasattr(session, "laps") and not session.laps.empty:
+            if include_laps and hasattr(session, "laps") and not session.laps.empty:
                 laps = session.laps.copy()
                 laps["season"] = year
                 laps["round"] = round_number
+                laps["session_name"] = code
                 lap_times.append(laps)
             if hasattr(session, "weather_data") and session.weather_data is not None and not session.weather_data.empty:
                 w = session.weather_data.copy()
@@ -149,13 +151,15 @@ def _fastf1_results_and_laps(events: pd.DataFrame, version: str, include_laps: b
 
     race_df = pd.concat(race_results, ignore_index=True) if race_results else pd.DataFrame()
     quali_df = pd.concat(qualifying, ignore_index=True) if qualifying else pd.DataFrame()
+    practice_df = pd.concat(practice_results, ignore_index=True) if practice_results else pd.DataFrame()
     laps_df = pd.concat(lap_times, ignore_index=True) if lap_times else pd.DataFrame()
     weather_df = pd.concat(weather, ignore_index=True) if weather else pd.DataFrame()
     _write_raw_fastf1(race_df, version, "race_results")
     _write_raw_fastf1(quali_df, version, "qualifying_results")
+    _write_raw_fastf1(practice_df, version, "practice_results")
     _write_raw_fastf1(laps_df, version, "race_laps")
     _write_raw_fastf1(weather_df, version, "weather")
-    return {"race_results": race_df, "qualifying": quali_df, "lap_times": laps_df, "weather": weather_df}
+    return {"race_results": race_df, "qualifying": quali_df, "practice": practice_df, "lap_times": laps_df, "weather": weather_df}
 
 
 def _openf1_tables(years: Iterable[int], include_telemetry: bool, max_sessions: int | None) -> dict[str, pd.DataFrame]:
@@ -251,6 +255,94 @@ def _openf1_telemetry_aggregate(
     out["session_key"] = session_key
     out["source"] = "openf1"
     return out
+
+
+def _infer_openf1_rounds(openf1_sessions: pd.DataFrame, events: pd.DataFrame) -> pd.DataFrame:
+    if openf1_sessions.empty:
+        return openf1_sessions
+    sessions = openf1_sessions.copy()
+    if "round" in sessions.columns and sessions["round"].notna().any():
+        return sessions
+    sessions["round"] = pd.NA
+    if events.empty or "meeting_key" not in sessions.columns:
+        return sessions
+
+    event_lookup = events.copy()
+    event_lookup["race_date_sort"] = pd.to_datetime(event_lookup.get("race_date"), errors="coerce", utc=True)
+    event_lookup = event_lookup.sort_values(["season", "race_date_sort", "round"])
+    for season, season_sessions in sessions.groupby("season", dropna=False):
+        season_events = event_lookup[event_lookup["season"] == season]
+        if season_events.empty:
+            continue
+        meeting_order = (
+            season_sessions.groupby("meeting_key", dropna=False)
+            .agg(
+                date_start=("date_start", "min") if "date_start" in season_sessions else ("session_key", "min"),
+                meeting_name=("meeting_name", "first") if "meeting_name" in season_sessions else ("session_name", "first"),
+                country_name=("country_name", "first") if "country_name" in season_sessions else ("session_name", "first"),
+                location=("location", "first") if "location" in season_sessions else ("session_name", "first"),
+                circuit_short_name=("circuit_short_name", "first") if "circuit_short_name" in season_sessions else ("session_name", "first"),
+            )
+            .reset_index()
+        )
+        meeting_order["date_start_sort"] = pd.to_datetime(meeting_order["date_start"], errors="coerce", utc=True)
+        meeting_order = meeting_order.sort_values(["date_start_sort", "meeting_key"])
+        for ordinal, meeting in enumerate(meeting_order.itertuples(index=False), start=0):
+            text = " ".join(
+                str(getattr(meeting, field, "")).lower()
+                for field in ("meeting_name", "country_name", "location", "circuit_short_name")
+            )
+            matched_round = pd.NA
+            for _, event in season_events.iterrows():
+                candidates = [
+                    str(event.get("event_name", "")).lower().replace(" grand prix", ""),
+                    str(event.get("country", "")).lower(),
+                    str(event.get("location", "")).lower(),
+                ]
+                if any(candidate and candidate in text for candidate in candidates):
+                    matched_round = event["round"]
+                    break
+            if pd.isna(matched_round) and ordinal < len(season_events):
+                matched_round = season_events.iloc[ordinal]["round"]
+            sessions.loc[(sessions["season"] == season) & (sessions["meeting_key"] == meeting.meeting_key), "round"] = matched_round
+    sessions["round"] = pd.to_numeric(sessions["round"], errors="coerce")
+    return sessions
+
+
+def _attach_openf1_session_context(table: pd.DataFrame, session_context: pd.DataFrame) -> pd.DataFrame:
+    if table.empty or session_context.empty or "session_key" not in table.columns:
+        return table
+    context_cols = [
+        column
+        for column in ("session_key", "meeting_key", "season", "round", "session_name", "date_start")
+        if column in session_context.columns
+    ]
+    context = session_context[context_cols].drop_duplicates("session_key")
+    drop_cols = [column for column in ("meeting_key", "season", "round", "session_name", "date_start") if column in table.columns]
+    return table.drop(columns=drop_cols, errors="ignore").merge(context, on="session_key", how="left")
+
+
+def _attach_openf1_driver_context(table: pd.DataFrame, openf1_drivers: pd.DataFrame) -> pd.DataFrame:
+    if table.empty or openf1_drivers.empty or "driver_number" not in table.columns or "driver_number" not in openf1_drivers.columns:
+        return table
+    drivers = openf1_drivers.rename(
+        columns={
+            "team_name": "constructor_name",
+            "name_acronym": "driver_code",
+            "full_name": "driver_name",
+        }
+    )
+    keys = ["driver_number"]
+    if "session_key" in table.columns and "session_key" in drivers.columns:
+        keys.insert(0, "session_key")
+    keep = [
+        column
+        for column in (*keys, "constructor_name", "driver_code", "driver_name")
+        if column in drivers.columns
+    ]
+    context = drivers[keep].drop_duplicates(keys)
+    drop_cols = [column for column in ("constructor_name", "driver_code", "driver_name") if column in table.columns]
+    return table.drop(columns=drop_cols, errors="ignore").merge(context, on=keys, how="left")
 
 
 def _normalise_race_results(race: pd.DataFrame) -> pd.DataFrame:
@@ -418,25 +510,34 @@ def build_rich_dataset(
     session_conditions = _session_conditions(weather)
 
     if include_openf1:
-        sessions = pd.concat([sessions, openf1_tables.get("sessions", pd.DataFrame())], ignore_index=True, sort=False)
-        grid_entries = openf1_tables.get("grid_entries", pd.DataFrame())
-        openf1_laps = openf1_tables.get("laps", pd.DataFrame())
+        openf1_sessions = _infer_openf1_rounds(openf1_tables.get("sessions", pd.DataFrame()), events)
+        context_cols = [
+            column
+            for column in ("session_key", "meeting_key", "season", "round", "session_name", "date_start")
+            if column in openf1_sessions.columns
+        ]
+        session_context = openf1_sessions[context_cols].copy() if context_cols else pd.DataFrame()
+        driver_context = openf1_tables.get("drivers", pd.DataFrame())
+        sessions = pd.concat([sessions, openf1_sessions], ignore_index=True, sort=False)
+        grid_entries = _attach_openf1_driver_context(_attach_openf1_session_context(openf1_tables.get("grid_entries", pd.DataFrame()), session_context), driver_context)
+        openf1_laps = _attach_openf1_driver_context(_attach_openf1_session_context(openf1_tables.get("laps", pd.DataFrame()), session_context), driver_context)
         if not openf1_laps.empty:
             openf1_laps["source"] = "openf1"
             lap_times = pd.concat([lap_times, openf1_laps], ignore_index=True, sort=False)
-        openf1_stints = openf1_tables.get("stints", pd.DataFrame())
+        openf1_stints = _attach_openf1_driver_context(_attach_openf1_session_context(openf1_tables.get("stints", pd.DataFrame()), session_context), driver_context)
         if not openf1_stints.empty:
             stint_summaries = pd.concat([stint_summaries, openf1_stints.assign(source="openf1")], ignore_index=True, sort=False)
-        openf1_pit = openf1_tables.get("pit", pd.DataFrame())
+        openf1_pit = _attach_openf1_driver_context(_attach_openf1_session_context(openf1_tables.get("pit", pd.DataFrame()), session_context), driver_context)
         if not openf1_pit.empty:
             pit_stops = pd.concat([pit_stops, openf1_pit.assign(source="openf1")], ignore_index=True, sort=False)
-        openf1_weather = openf1_tables.get("weather", pd.DataFrame())
+        openf1_weather = _attach_openf1_session_context(openf1_tables.get("weather", pd.DataFrame()), session_context)
         if not openf1_weather.empty:
             weather = pd.concat([weather, openf1_weather.assign(source="openf1")], ignore_index=True, sort=False)
-        telemetry = openf1_tables.get("telemetry_aggregates", pd.DataFrame())
+        telemetry = _attach_openf1_driver_context(_attach_openf1_session_context(openf1_tables.get("telemetry_aggregates", pd.DataFrame()), session_context), driver_context)
     else:
         grid_entries = pd.DataFrame()
         telemetry = pd.DataFrame()
+    session_conditions = _session_conditions(weather)
 
     drivers, constructors = _merge_driver_constructor(race_results, qualifying, openf1_tables.get("drivers", pd.DataFrame()))
     tables = {

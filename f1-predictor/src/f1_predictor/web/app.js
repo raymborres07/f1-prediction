@@ -92,6 +92,46 @@ function renderPredictions(predictions) {
     .join("");
 }
 
+function finishBandFromDistribution(row) {
+  const probabilities = Object.entries(row)
+    .filter(([key]) => /^p\d+_probability$/.test(key))
+    .map(([key, value]) => [Number(key.match(/\d+/)[0]), Number(value || 0)])
+    .sort((a, b) => a[0] - b[0]);
+  let cumulative = 0;
+  let low = null;
+  let high = null;
+  for (const [position, probability] of probabilities) {
+    cumulative += probability;
+    if (low === null && cumulative >= 0.1) low = position;
+    if (high === null && cumulative >= 0.9) high = position;
+  }
+  return { low, high };
+}
+
+function mergeSimulationPredictions(predictions, simulation) {
+  const simulated = simulation.predictions ?? [];
+  if (!simulated.length) return predictions;
+  const distributions = new Map((simulation.finish_distributions ?? []).map((row) => [row.driver_code, row]));
+  const byDriver = new Map(simulated.map((row) => [row.driver_code, row]));
+  return predictions
+    .map((row) => {
+      const sim = byDriver.get(row.driver_code);
+      if (!sim) return row;
+      const band = finishBandFromDistribution(distributions.get(row.driver_code) ?? {});
+      return {
+        ...row,
+        prediction_rank: sim.simulation_rank ?? row.prediction_rank,
+        win_probability: sim.win_probability,
+        podium_probability: sim.podium_probability,
+        top10_probability: sim.top10_probability,
+        expected_finish: sim.expected_finish,
+        finish_low: band.low ?? row.finish_low,
+        finish_high: band.high ?? row.finish_high,
+      };
+    })
+    .sort((a, b) => Number(a.prediction_rank) - Number(b.prediction_rank));
+}
+
 function renderContributionText(row) {
   const contributions = row.feature_contributions ?? [];
   if (!contributions.length) return row.explanation ?? "";
@@ -166,7 +206,9 @@ async function loadPredictions() {
     }
     renderRace(payload.race);
     renderMetadata(payload.metadata ?? {});
-    renderPredictions(payload.predictions);
+    const simulationResponse = await fetch(`/api/simulations/${payload.race.year}/${payload.race.round}`);
+    const simulation = simulationResponse.ok ? await simulationResponse.json() : { predictions: [] };
+    renderPredictions(mergeSimulationPredictions(payload.predictions, simulation));
     const [backtestResponse, calibrationResponse] = await Promise.all([
       fetch("/api/reports/backtest"),
       fetch("/api/reports/podium-calibration"),
@@ -176,7 +218,9 @@ async function loadPredictions() {
     renderMetrics(payload.metadata ?? {}, backtest);
     renderReliability(calibration.rows ?? []);
     renderDiagnostics(backtest.worst_windows ?? []);
-    statusEl.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+    statusEl.textContent = simulation.predictions?.length
+      ? `Updated ${new Date().toLocaleTimeString()} | Monte Carlo overlay active`
+      : `Updated ${new Date().toLocaleTimeString()}`;
   } catch (error) {
     raceEl.innerHTML = `<span>Prediction data unavailable</span>`;
     metadataEl.innerHTML = `<span>Metadata unavailable</span>`;

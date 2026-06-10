@@ -55,8 +55,11 @@ Or use the installed command aliases:
 ```powershell
 f1-ingest --start-year 2021 --end-year 2025
 f1-ingest-rich --start-year 2023 --end-year 2026 --include-telemetry
+f1-practice-features
+f1-upgrade-news
 f1-features
 f1-features-rich
+f1-simulate --simulations 10000
 f1-train
 f1-backtest
 f1-predict-next
@@ -95,6 +98,8 @@ API endpoints:
 - `GET /api/predictions/{year}/{round_number}`
 - `GET /api/reports/podium-calibration`
 - `GET /api/reports/backtest`
+- `GET /api/simulations/latest`
+- `GET /api/simulations/{year}/{round_number}`
 
 ## Deploy To Vercel
 
@@ -120,7 +125,10 @@ For deeper modeling, run the normalized FastF1/OpenF1 pipeline:
 
 ```powershell
 f1-ingest-rich --start-year 2023 --end-year 2026
+f1-practice-features
+f1-upgrade-news
 f1-features-rich
+f1-simulate --simulations 10000
 ```
 
 Add `--include-telemetry` to aggregate OpenF1 car/location streams. This can be large; use `--max-openf1-sessions 5` for smoke tests.
@@ -134,5 +142,9 @@ The rich pipeline writes versioned raw pulls under `data/raw/fastf1` and `data/r
 - `weather_conditions`, `session_conditions`
 - `telemetry_aggregates`
 - `pre_race_features`, `race_sim_inputs`
+- `practice_features`, `upgrade_news`, `upgrade_features`
+- `simulations/simulation_summary`, `simulations/finish_distributions`
 
 FastF1 remains the primary source for schedules, results, qualifying, laps, and weather. OpenF1 supplements historical timing, grid, stints, pit, weather, and telemetry data from 2023 onward.
+
+`f1-practice-features` extracts FP1/FP2/FP3 single-lap pace, long-run pace, lap-count reliability, stint consistency, sector deltas, speed-trap summaries, and teammate-relative pace from the rich lap table. `f1-upgrade-news` caches race-weekend RSS/Atom pulls from trusted F1 news feeds and converts team upgrade reports into structured constructor-event features. `f1-simulate` estimates latent race pace, reliability risk, starts, tyre degradation, pit-stop loss, and racecraft inputs, then runs Monte Carlo finish simulations for win, podium, top-10, expected finish, and full finish-position distributions.
