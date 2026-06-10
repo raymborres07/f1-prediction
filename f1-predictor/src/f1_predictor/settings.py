@@ -13,6 +13,9 @@ RAW_DIR = DATA_DIR / "raw"
 PROCESSED_DIR = DATA_DIR / "processed"
 MODEL_DIR = DATA_DIR / "models"
 METRICS_DIR = DATA_DIR / "metrics"
+FASTF1_RAW_DIR = RAW_DIR / "fastf1"
+OPENF1_RAW_DIR = RAW_DIR / "openf1"
+RICH_PROCESSED_DIR = PROCESSED_DIR / "rich"
 DEMO_PROCESSED_DIR = DEMO_DATA_DIR / "processed"
 DEMO_MODEL_DIR = DEMO_DATA_DIR / "models"
 DEMO_METRICS_DIR = DEMO_DATA_DIR / "metrics"
@@ -35,6 +38,25 @@ CALIBRATION_REPORT_PATH = METRICS_DIR / "podium_calibration.csv"
 BACKTEST_PREDICTIONS_PATH = METRICS_DIR / "backtest_predictions.parquet"
 BACKTEST_METRICS_PATH = METRICS_DIR / "backtest_metrics.csv"
 
+SEASONS_TABLE_PATH = RICH_PROCESSED_DIR / "seasons.parquet"
+EVENTS_TABLE_PATH = RICH_PROCESSED_DIR / "events.parquet"
+SESSIONS_TABLE_PATH = RICH_PROCESSED_DIR / "sessions.parquet"
+RICH_DRIVERS_TABLE_PATH = RICH_PROCESSED_DIR / "drivers.parquet"
+RICH_CONSTRUCTORS_TABLE_PATH = RICH_PROCESSED_DIR / "constructors.parquet"
+GRID_ENTRIES_TABLE_PATH = RICH_PROCESSED_DIR / "grid_entries.parquet"
+RICH_QUALIFYING_TABLE_PATH = RICH_PROCESSED_DIR / "qualifying.parquet"
+RICH_RACE_RESULTS_TABLE_PATH = RICH_PROCESSED_DIR / "race_results.parquet"
+LAP_TIMES_TABLE_PATH = RICH_PROCESSED_DIR / "lap_times.parquet"
+STINT_SUMMARIES_TABLE_PATH = RICH_PROCESSED_DIR / "stint_summaries.parquet"
+TYRE_USAGE_TABLE_PATH = RICH_PROCESSED_DIR / "tyre_usage.parquet"
+PIT_STOPS_TABLE_PATH = RICH_PROCESSED_DIR / "pit_stops.parquet"
+WEATHER_CONDITIONS_TABLE_PATH = RICH_PROCESSED_DIR / "weather_conditions.parquet"
+SESSION_CONDITIONS_TABLE_PATH = RICH_PROCESSED_DIR / "session_conditions.parquet"
+TELEMETRY_AGGREGATES_TABLE_PATH = RICH_PROCESSED_DIR / "telemetry_aggregates.parquet"
+PRE_RACE_FEATURES_TABLE_PATH = RICH_PROCESSED_DIR / "pre_race_features.parquet"
+RACE_SIM_INPUTS_TABLE_PATH = RICH_PROCESSED_DIR / "race_sim_inputs.parquet"
+RICH_DATASET_METADATA_PATH = RICH_PROCESSED_DIR / "dataset_metadata.json"
+
 DEMO_SCHEDULE_PATH = DEMO_PROCESSED_DIR / "schedule.parquet"
 DEMO_RACES_CLEAN_PATH = DEMO_PROCESSED_DIR / "races.parquet"
 DEMO_QUALIFYING_CLEAN_PATH = DEMO_PROCESSED_DIR / "qualifying.parquet"
@@ -53,7 +75,17 @@ def readable_path(primary: Path, fallback: Path) -> Path:
 
 
 def ensure_directories() -> None:
-    for path in (DATA_DIR, CACHE_DIR, RAW_DIR, PROCESSED_DIR, MODEL_DIR, METRICS_DIR):
+    for path in (
+        DATA_DIR,
+        CACHE_DIR,
+        RAW_DIR,
+        FASTF1_RAW_DIR,
+        OPENF1_RAW_DIR,
+        PROCESSED_DIR,
+        RICH_PROCESSED_DIR,
+        MODEL_DIR,
+        METRICS_DIR,
+    ):
         try:
             path.mkdir(parents=True, exist_ok=True)
         except OSError:

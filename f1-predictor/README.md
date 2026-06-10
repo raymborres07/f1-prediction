@@ -54,7 +54,9 @@ Or use the installed command aliases:
 
 ```powershell
 f1-ingest --start-year 2021 --end-year 2025
+f1-ingest-rich --start-year 2023 --end-year 2026 --include-telemetry
 f1-features
+f1-features-rich
 f1-train
 f1-backtest
 f1-predict-next
@@ -111,3 +113,26 @@ The production app serves the FastAPI API and mounted static frontend as one pro
 The dataset build writes clean processed tables for `races`, `qualifying`, `drivers`, `constructors`, and `modeling_table`, plus timestamped Parquet copies for reproducibility. The feature pipeline is intentionally leak-aware. For a target race, rolling driver and constructor form only use prior races. Grid position and teammate qualifying deltas use qualifying data for the target race when available; otherwise they fall back to neutral values so upcoming race predictions can still be generated before qualifying.
 
 Training calibrates win, podium, and top-10 classifiers with scikit-learn when enough data is available. Backtesting walks forward race by race and writes `data/metrics/backtest_metrics.csv` with Brier scores and finish MAE.
+
+## Rich Data Pipeline
+
+For deeper modeling, run the normalized FastF1/OpenF1 pipeline:
+
+```powershell
+f1-ingest-rich --start-year 2023 --end-year 2026
+f1-features-rich
+```
+
+Add `--include-telemetry` to aggregate OpenF1 car/location streams. This can be large; use `--max-openf1-sessions 5` for smoke tests.
+
+The rich pipeline writes versioned raw pulls under `data/raw/fastf1` and `data/raw/openf1`, then normalized Parquet tables under `data/processed/rich`:
+
+- `seasons`, `events`, `sessions`
+- `drivers`, `constructors`, `grid_entries`
+- `qualifying`, `race_results`, `lap_times`
+- `stint_summaries`, `tyre_usage`, `pit_stops`
+- `weather_conditions`, `session_conditions`
+- `telemetry_aggregates`
+- `pre_race_features`, `race_sim_inputs`
+
+FastF1 remains the primary source for schedules, results, qualifying, laps, and weather. OpenF1 supplements historical timing, grid, stints, pit, weather, and telemetry data from 2023 onward.
