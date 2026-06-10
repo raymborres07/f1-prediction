@@ -54,4 +54,11 @@ def readable_path(primary: Path, fallback: Path) -> Path:
 
 def ensure_directories() -> None:
     for path in (DATA_DIR, CACHE_DIR, RAW_DIR, PROCESSED_DIR, MODEL_DIR, METRICS_DIR):
-        path.mkdir(parents=True, exist_ok=True)
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            # Serverless deployments such as Vercel expose the application
+            # bundle as read-only. In that mode the API reads packaged demo
+            # artifacts from src/f1_predictor/demo_data instead of writing
+            # generated pipeline outputs under data/.
+            continue
