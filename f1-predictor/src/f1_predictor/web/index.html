@@ -23,16 +23,16 @@
         </div>
       </section>
 
-      <nav class="tabs geek-only" aria-label="Product sections">
-        <button class="tab active" type="button">Race Hub</button>
-        <button class="tab" type="button">Live Race</button>
-        <button class="tab" type="button">History</button>
-        <button class="tab" type="button">Driver Ratings</button>
-        <button class="tab" type="button">Compatibility Lab</button>
-        <button class="tab" type="button">What-If Matchups</button>
+      <nav class="tabs" aria-label="Product sections">
+        <button class="tab active" type="button" data-section="race-hub">Race Hub</button>
+        <button class="tab" type="button" data-section="live-race">Live Race</button>
+        <button class="tab" type="button" data-section="history">History</button>
+        <button class="tab" type="button" data-section="driver-ratings">Driver Ratings</button>
+        <button class="tab" type="button" data-section="lab">Compatibility Lab</button>
+        <button class="tab" type="button" data-section="what-if">What-If Matchups</button>
       </nav>
 
-      <section class="race-hero">
+      <section class="race-hero app-section race-hub-section">
         <div class="race-card" id="race">
           <span>Loading race</span>
         </div>
@@ -43,11 +43,11 @@
         </div>
       </section>
 
-      <section class="meta-strip" id="metadata">
+      <section class="meta-strip app-section race-hub-section" id="metadata">
         <span>Loading model metadata</span>
       </section>
 
-      <section class="schedule-panel">
+      <section class="schedule-panel app-section race-hub-section">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Weekend Schedule</p>
@@ -60,7 +60,7 @@
         </div>
       </section>
 
-      <section class="forecast-panel basic-only">
+      <section class="forecast-panel basic-only app-section race-hub-section">
         <div class="section-heading table-heading">
           <div>
             <p class="eyebrow">Forecast</p>
@@ -97,7 +97,7 @@
         </section>
       </section>
 
-      <section class="panel-grid geek-only">
+      <section class="panel-grid geek-only app-section race-hub-section">
         <section class="panel">
           <h2>Backtest Metrics</h2>
           <div class="metric-grid" id="metrics">
@@ -119,14 +119,14 @@
         </section>
       </section>
 
-      <section class="section-heading table-heading geek-only">
+      <section class="section-heading table-heading geek-only app-section race-hub-section">
         <div>
           <p class="eyebrow">Geek Forecast</p>
           <h2>Full race table</h2>
         </div>
       </section>
 
-      <section class="table-wrap geek-only">
+      <section class="table-wrap geek-only app-section race-hub-section">
         <table>
           <thead>
             <tr>
@@ -150,7 +150,7 @@
         </table>
       </section>
 
-      <section class="history-section geek-only">
+      <section class="history-section geek-only app-section race-hub-section">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Historical Context</p>
@@ -174,6 +174,118 @@
             <p>Speculative what-if tools for compatibility, ratings, and cross-era matchups.</p>
           </article>
         </div>
+      </section>
+
+      <section class="history-section app-section product-section" id="history-section" data-product-section="history" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">History</p>
+            <h2>Race archive and season browser</h2>
+          </div>
+          <div class="history-controls">
+            <label>
+              Season
+              <select id="history-season"></select>
+            </label>
+            <label>
+              Driver
+              <input id="history-driver" value="ANT" maxlength="4" />
+            </label>
+            <label>
+              Team
+              <input id="history-team" value="Mercedes" />
+            </label>
+          </div>
+        </div>
+        <p class="panel-copy" id="history-coverage">Loading history coverage.</p>
+        <div class="history-layout">
+          <section class="panel">
+            <h3>Season Browser</h3>
+            <div class="race-list" id="history-races">Loading races</div>
+          </section>
+          <section class="panel history-detail">
+            <h3 id="history-race-title">Race detail</h3>
+            <div class="history-summary-grid" id="history-summary"></div>
+            <div class="table-wrap compact-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Pos</th>
+                    <th>Driver</th>
+                    <th>Team</th>
+                    <th>Grid</th>
+                    <th>Points</th>
+                  </tr>
+                </thead>
+                <tbody id="history-results">
+                  <tr><td colspan="5">Select a race</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+        <section class="history-layout">
+          <section class="panel">
+            <h3>Driver Summary</h3>
+            <div class="history-summary-grid" id="history-driver-summary">Loading driver</div>
+          </section>
+          <section class="panel">
+            <h3>Team Summary</h3>
+            <div class="history-summary-grid" id="history-team-summary">Loading team</div>
+          </section>
+        </section>
+        <section class="panel geek-only">
+          <div class="section-heading table-heading">
+            <div>
+              <p class="eyebrow">Geek History</p>
+              <h2>Lap table and stint-ready detail</h2>
+            </div>
+            <span class="status" id="history-lap-status">Rich lap data loads where generated.</span>
+          </div>
+          <div class="table-wrap compact-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Driver</th>
+                  <th>Lap</th>
+                  <th>Stint</th>
+                  <th>Compound</th>
+                  <th>Lap Time</th>
+                  <th>S1</th>
+                  <th>S2</th>
+                  <th>S3</th>
+                </tr>
+              </thead>
+              <tbody id="history-laps">
+                <tr><td colspan="8">Select a race</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section class="history-section app-section product-section" data-product-section="live-race" hidden>
+        <p class="eyebrow">Live Race</p>
+        <h2>Live race mode</h2>
+        <p class="panel-copy">Lap-by-lap win probability, safety-car state, tyre state, and live leaderboard views will live here once live timing is connected.</p>
+      </section>
+
+      <section class="history-section app-section product-section" data-product-section="driver-ratings" hidden>
+        <p class="eyebrow">Driver Ratings</p>
+        <h2>Evidence-backed attributes</h2>
+        <p class="panel-copy">Qualifying pace, race pace, tyre management, wet-weather skill, consistency, and recovery-drive ratings should be derived from the History layer first.</p>
+      </section>
+
+      <section class="history-section app-section product-section" data-product-section="lab" hidden>
+        <p class="eyebrow">Lab</p>
+        <h2>Compatibility simulator</h2>
+        <p class="panel-copy">Driver-car fit and setup compatibility experiments belong here, separate from factual race forecasts.</p>
+      </section>
+
+      <section class="history-section app-section product-section" data-product-section="what-if" hidden>
+        <p class="eyebrow">What-if Matchups</p>
+        <h2>Speculative comparisons</h2>
+        <p class="panel-copy">Cross-era matchups will be clearly labeled as speculative simulations, not the same type of model as the race forecast.</p>
       </section>
     </main>
 

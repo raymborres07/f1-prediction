@@ -23,14 +23,32 @@ const qualifyingTab = document.querySelector("#qualifying-tab");
 const raceTab = document.querySelector("#race-tab");
 const basicNoteEl = document.querySelector("#basic-note");
 const forecastStatesEl = document.querySelector("#forecast-states");
+const productTabs = document.querySelectorAll("[data-section]");
+const raceHubSections = document.querySelectorAll(".race-hub-section");
+const productSections = document.querySelectorAll("[data-product-section]");
+const historySeasonEl = document.querySelector("#history-season");
+const historyDriverEl = document.querySelector("#history-driver");
+const historyTeamEl = document.querySelector("#history-team");
+const historyCoverageEl = document.querySelector("#history-coverage");
+const historyRacesEl = document.querySelector("#history-races");
+const historyRaceTitleEl = document.querySelector("#history-race-title");
+const historySummaryEl = document.querySelector("#history-summary");
+const historyResultsEl = document.querySelector("#history-results");
+const historyDriverSummaryEl = document.querySelector("#history-driver-summary");
+const historyTeamSummaryEl = document.querySelector("#history-team-summary");
+const historyLapsEl = document.querySelector("#history-laps");
+const historyLapStatusEl = document.querySelector("#history-lap-status");
 
 let countdownTimer = null;
 let activeMode = "basic";
 let activeForecast = "race";
+let activeSection = "race-hub";
 let racePayload = null;
 let qualifyingPayload = null;
 let weekendPayload = null;
 let statesPayload = null;
+let historyLoaded = false;
+let selectedHistoryRace = null;
 
 function formatDate(value, timeZone) {
   if (!value || value === "NaT") return "TBD";
@@ -154,7 +172,9 @@ function renderSessions(weekend) {
             <div><span>Wind</span><strong>${weather ? `${fixed(weather.wind_kph, 0)} kph` : "TBD"}</strong></div>
           </div>
           ${renderForecastStrip(weather)}
-          <small>${session.time_status ?? "scheduled"} - ${session.weather_status ?? "weather pending"}</small>
+          <small>
+            ${session.time_status ?? "scheduled"} - ${risk.riskText} - ${weather?.weather_risk_reason ?? session.weather_status ?? "weather pending"}
+          </small>
         </article>
       `;
     })
@@ -162,12 +182,18 @@ function renderSessions(weekend) {
 }
 
 function weatherRisk(weather) {
-  if (!weather) return { label: "TBD", className: "weather-unknown" };
+  if (!weather) return { label: "TBD", className: "weather-unknown", riskText: "Risk TBD" };
+  const score = Number(weather.weather_risk_score ?? weather.risk_score);
+  if (Number.isFinite(score)) {
+    if (score >= 60) return { label: "HIGH", className: "weather-rain", riskText: `Risk ${score}/100` };
+    if (score >= 30) return { label: "MED", className: "weather-risk", riskText: `Risk ${score}/100` };
+    return { label: "LOW", className: "weather-dry", riskText: `Risk ${score}/100` };
+  }
   const rain = Number(weather.rain_probability || 0);
   const cloud = Number(weather.cloud_cover || 0);
-  if (rain >= 45) return { label: "WET", className: "weather-rain" };
-  if (rain >= 20 || cloud >= 70) return { label: "RISK", className: "weather-risk" };
-  return { label: "DRY", className: "weather-dry" };
+  if (rain >= 45) return { label: "WET", className: "weather-rain", riskText: "Risk high" };
+  if (rain >= 20 || cloud >= 70) return { label: "RISK", className: "weather-risk", riskText: "Risk medium" };
+  return { label: "DRY", className: "weather-dry", riskText: "Risk low" };
 }
 
 function renderForecastStrip(weather) {
@@ -264,13 +290,13 @@ function renderRaceTable(predictions, target, limit = 5, geek = false) {
       }
       return `
         <tr>
-          <td>P${row.prediction_rank ?? ""}</td>
+          <td>${rankCell(row.prediction_rank, row.delta_rank)}</td>
           <td>${driverCell(row)}</td>
           <td>${row.constructor_name ?? ""}</td>
-          <td>${probabilityCell(row.win_probability)}</td>
-          <td>${probabilityCell(row.podium_probability)}</td>
-          <td>${probabilityCell(row.top10_probability)}</td>
-          <td>P${fixed(row.expected_finish)}</td>
+          <td>${probabilityCell(row.win_probability, row.delta_win_probability)}</td>
+          <td>${probabilityCell(row.podium_probability, row.delta_podium_probability)}</td>
+          <td>${probabilityCell(row.top10_probability, row.delta_top10_probability)}</td>
+          <td>${finishCell(row.expected_finish, row.delta_expected_finish)}</td>
         </tr>
       `;
     })
@@ -347,7 +373,8 @@ function renderForecastStates(payload) {
   forecastStatesEl.innerHTML = states
     .map((state) => `
       <span class="state-pill ${state.available ? "available" : "pending"} ${state.state === payload.current_state ? "current" : ""}">
-        ${state.state}
+        <b>${state.state}</b>
+        <small>${state.available ? "ready" : "pending"}</small>
       </span>
     `)
     .join("");
@@ -357,14 +384,49 @@ function findDriver(rows = [], code) {
   return rows.find((row) => row.driver_code === code);
 }
 
-function probabilityCell(value) {
+function probabilityCell(value, delta = null) {
   const percent = Math.max(0, Math.min(100, Number(value || 0) * 100));
   return `
     <div class="probability-cell">
       <span>${pct(value)}</span>
       <i style="width:${percent}%"></i>
+      ${deltaChip(delta, "pp")}
     </div>
   `;
+}
+
+function finishCell(value, delta = null) {
+  return `
+    <div class="finish-cell">
+      <span>P${fixed(value)}</span>
+      ${deltaChip(delta, "pos", true)}
+    </div>
+  `;
+}
+
+function rankCell(value, delta = null) {
+  return `
+    <div class="finish-cell">
+      <span>P${value ?? ""}</span>
+      ${deltaChip(delta, "rank", true)}
+    </div>
+  `;
+}
+
+function deltaChip(delta, unit, lowerIsBetter = false) {
+  if (delta === null || delta === undefined || Number.isNaN(Number(delta))) return "";
+  const numeric = Number(delta);
+  const displayValue =
+    unit === "pp"
+      ? `${Math.abs(numeric * 100).toFixed(1)}pp`
+      : unit === "rank"
+        ? `${Math.abs(numeric).toFixed(0)} rank`
+        : `${Math.abs(numeric).toFixed(1)} ${unit}`;
+  const direction = numeric > 0 ? "up" : numeric < 0 ? "down" : "flat";
+  const helpful = lowerIsBetter ? numeric < 0 : numeric > 0;
+  const className = numeric === 0 ? "flat" : helpful ? "good" : "bad";
+  const arrow = direction === "up" ? "▲" : direction === "down" ? "▼" : "•";
+  return `<small class="delta ${className}">${arrow} ${displayValue}</small>`;
 }
 
 function driverCell(row) {
@@ -479,6 +541,157 @@ function formatDriverCodes(codes = []) {
   return codes.length ? codes.join(" - ") : "TBD";
 }
 
+function setProductSection(section) {
+  activeSection = section;
+  productTabs.forEach((button) => button.classList.toggle("active", button.dataset.section === section));
+  raceHubSections.forEach((node) => {
+    node.hidden = section !== "race-hub";
+  });
+  productSections.forEach((node) => {
+    node.hidden = node.dataset.productSection !== section;
+  });
+  if (section === "history" && !historyLoaded) {
+    loadHistory();
+  }
+}
+
+async function loadHistory() {
+  historyLoaded = true;
+  historyRacesEl.textContent = "Loading races...";
+  try {
+    const seasonsResponse = await fetch("/api/history/seasons");
+    const seasons = await seasonsResponse.json();
+    renderHistoryCoverage(seasons.metadata ?? {});
+    renderSeasonOptions(seasons.seasons ?? []);
+    const selectedYear = Number(historySeasonEl.value || seasons.seasons?.[0]?.year || 2026);
+    await loadHistoryYear(selectedYear);
+    await Promise.all([loadHistoryDriver(), loadHistoryTeam()]);
+  } catch (error) {
+    historyRacesEl.textContent = `History unavailable: ${error.message}`;
+  }
+}
+
+function renderHistoryCoverage(metadata) {
+  const coverage = metadata.coverage ?? {};
+  historyCoverageEl.textContent = `${coverage.broad_results ?? "Broad results archive"}; ${coverage.rich_session_detail ?? "rich session detail when available"}.`;
+}
+
+function renderSeasonOptions(seasons) {
+  historySeasonEl.innerHTML = seasons
+    .map((season) => `<option value="${season.year}">${season.year} (${season.event_count ?? 0} races)</option>`)
+    .join("");
+}
+
+async function loadHistoryYear(year) {
+  historyRacesEl.textContent = "Loading races...";
+  const response = await fetch(`/api/history/${year}/races`);
+  const payload = await response.json();
+  const races = payload.races ?? [];
+  historyRacesEl.innerHTML = races
+    .map((race) => `
+      <button class="race-list-item" type="button" data-year="${race.year}" data-round="${race.round}">
+        <strong>R${race.round} ${race.event_name ?? "Grand Prix"}</strong>
+        <span>${race.circuit ?? race.location ?? "Circuit TBD"}</span>
+        <small>Winner ${race.winner ?? "TBD"} - Pole ${race.pole ?? "TBD"} - Podium ${formatDriverCodes(race.podium ?? [])}</small>
+      </button>
+    `)
+    .join("");
+  const firstRace = races[0];
+  if (firstRace) {
+    await loadHistoryRace(firstRace.year, firstRace.round);
+  }
+}
+
+async function loadHistoryRace(year, round) {
+  selectedHistoryRace = { year, round };
+  const [summaryResponse, lapsResponse] = await Promise.all([
+    fetch(`/api/history/${year}/${round}/summary`),
+    fetch(`/api/history/${year}/${round}/laps?limit=80`),
+  ]);
+  const summary = await summaryResponse.json();
+  const laps = await lapsResponse.json();
+  renderHistoryRace(summary);
+  renderHistoryLaps(laps);
+}
+
+function renderHistoryRace(payload) {
+  const event = payload.event ?? {};
+  historyRaceTitleEl.textContent = `${event.year ?? ""} ${event.event_name ?? `Round ${event.round}`}`;
+  const podium = payload.podium ?? [];
+  const fastest = payload.fastest_laps ?? [];
+  historySummaryEl.innerHTML = `
+    <div><span>Winner</span><strong>${podium[0]?.driver_code ?? "TBD"}</strong></div>
+    <div><span>Podium</span><strong>${formatDriverCodes(podium.map((row) => row.driver_code).filter(Boolean))}</strong></div>
+    <div><span>Pole</span><strong>${payload.qualifying_top10?.[0]?.driver_code ?? "TBD"}</strong></div>
+    <div><span>Fastest lap</span><strong>${fastest[0]?.driver_code ?? "TBD"}</strong></div>
+  `;
+  historyResultsEl.innerHTML = (payload.race_results ?? [])
+    .map((row) => `
+      <tr>
+        <td>P${fixed(row.finish_position, 0)}</td>
+        <td>${driverCell(row)}</td>
+        <td>${row.constructor_name ?? ""}</td>
+        <td>${row.grid_position ? `P${fixed(row.grid_position, 0)}` : "TBD"}</td>
+        <td>${fixed(row.points, 1)}</td>
+      </tr>
+    `)
+    .join("") || `<tr><td colspan="5">No race results available.</td></tr>`;
+}
+
+function renderHistoryLaps(payload) {
+  const rows = payload.rows ?? [];
+  const metadata = payload.metadata ?? {};
+  historyLapStatusEl.textContent = metadata.available
+    ? `${metadata.row_count} rich lap rows available; showing first ${rows.length}.`
+    : "No rich lap table packaged for this race yet.";
+  historyLapsEl.innerHTML = rows
+    .map((row) => `
+      <tr>
+        <td>${row.driver_code ?? ""}</td>
+        <td>${fixed(row.lap_number, 0)}</td>
+        <td>${row.stint_number ? fixed(row.stint_number, 0) : "TBD"}</td>
+        <td>${row.compound ?? "TBD"}</td>
+        <td>${fixed(row.lap_time_seconds, 3)}s</td>
+        <td>${formatSector(row.sector1_time)}</td>
+        <td>${formatSector(row.sector2_time)}</td>
+        <td>${formatSector(row.sector3_time)}</td>
+      </tr>
+    `)
+    .join("") || `<tr><td colspan="8">No lap rows available for this race.</td></tr>`;
+}
+
+function formatSector(value) {
+  if (value === null || value === undefined) return "TBD";
+  const seconds = Number(value);
+  return Number.isFinite(seconds) ? `${seconds.toFixed(3)}s` : String(value);
+}
+
+async function loadHistoryDriver() {
+  const code = (historyDriverEl.value || "ANT").trim().toUpperCase();
+  const response = await fetch(`/api/history/drivers/${encodeURIComponent(code)}`);
+  const payload = await response.json();
+  renderHistoryEntitySummary(historyDriverSummaryEl, payload.summary ?? {}, payload.driver_name ?? code);
+}
+
+async function loadHistoryTeam() {
+  const team = (historyTeamEl.value || "Mercedes").trim();
+  const response = await fetch(`/api/history/teams/${encodeURIComponent(team)}`);
+  const payload = await response.json();
+  renderHistoryEntitySummary(historyTeamSummaryEl, payload.summary ?? {}, payload.team_name ?? team);
+}
+
+function renderHistoryEntitySummary(target, summary, title) {
+  const cards = [
+    ["Name", title],
+    ["Starts/Entries", summary.starts ?? summary.entries ?? 0],
+    ["Wins", summary.wins ?? 0],
+    ["Podiums", summary.podiums ?? 0],
+    ["Avg finish", summary.average_finish ?? "TBD"],
+    ["Points", summary.points ?? "TBD"],
+  ];
+  target.innerHTML = cards.map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("");
+}
+
 async function loadGeekReports() {
   const [backtestResponse, calibrationResponse, benchmarkResponse] = await Promise.all([
     fetch("/api/reports/backtest"),
@@ -539,7 +752,16 @@ basicModeButton.addEventListener("click", () => setMode("basic"));
 geekModeButton.addEventListener("click", () => setMode("geek"));
 qualifyingTab.addEventListener("click", () => setForecastTab("qualifying"));
 raceTab.addEventListener("click", () => setForecastTab("race"));
+productTabs.forEach((button) => button.addEventListener("click", () => setProductSection(button.dataset.section)));
+historySeasonEl.addEventListener("change", () => loadHistoryYear(Number(historySeasonEl.value)));
+historyRacesEl.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-year][data-round]");
+  if (button) loadHistoryRace(Number(button.dataset.year), Number(button.dataset.round));
+});
+historyDriverEl.addEventListener("change", loadHistoryDriver);
+historyTeamEl.addEventListener("change", loadHistoryTeam);
 modelCardOpen.addEventListener("click", () => modelCard.showModal());
 modelCardClose.addEventListener("click", () => modelCard.close());
 setMode("basic");
+setProductSection("race-hub");
 loadPredictions();

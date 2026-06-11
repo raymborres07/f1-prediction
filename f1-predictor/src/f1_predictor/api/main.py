@@ -29,12 +29,19 @@ from f1_predictor.settings import (
     DEMO_MODEL_METADATA_PATH,
     DEMO_PRE_RACE_FEATURES_TABLE_PATH,
     DEMO_QUALIFYING_CLEAN_PATH,
+    DEMO_RACES_CLEAN_PATH,
     DEMO_SCHEDULE_PATH,
     EVENTS_TABLE_PATH,
     MODEL_BUNDLE_PATH,
     MODEL_METADATA_PATH,
     PRE_RACE_FEATURES_TABLE_PATH,
     QUALIFYING_CLEAN_PATH,
+    RACES_CLEAN_PATH,
+    RICH_QUALIFYING_TABLE_PATH,
+    RICH_RACE_RESULTS_TABLE_PATH,
+    LAP_TIMES_TABLE_PATH,
+    STINT_SUMMARIES_TABLE_PATH,
+    SESSION_CONDITIONS_TABLE_PATH,
     SCHEDULE_PATH,
     SIMULATION_DISTRIBUTIONS_PATH,
     SIMULATION_METADATA_PATH,
@@ -221,6 +228,7 @@ def _fetch_open_meteo_weather(race: dict[str, object]) -> dict[str, dict[str, ob
                 "precipitation",
                 "wind_speed_10m",
                 "cloud_cover",
+                "weather_code",
             ]
         ),
         "timezone": race["timezone"],
@@ -243,6 +251,7 @@ def _fetch_open_meteo_weather(race: dict[str, object]) -> dict[str, dict[str, ob
             "rainfall": _hourly_value(hourly, "precipitation", index),
             "wind_kph": _hourly_value(hourly, "wind_speed_10m", index),
             "cloud_cover": _hourly_value(hourly, "cloud_cover", index),
+            "weather_code": _hourly_value(hourly, "weather_code", index),
             "source": "Open-Meteo live forecast",
         }
     return weather_by_time
@@ -277,14 +286,67 @@ def _weather_for_session(weather_by_time: dict[str, dict[str, object]], starts_a
             )
     enriched = dict(weather)
     enriched["forecast_window"] = window
+    enriched["weather_risk_score"] = _weather_risk_score(enriched)
+    enriched["weather_risk_label"] = _weather_risk_label(enriched["weather_risk_score"])
+    enriched["weather_risk_reason"] = _weather_risk_reason(enriched)
+    enriched["risk_score"] = enriched["weather_risk_score"]
+    enriched["risk_label"] = enriched["weather_risk_label"]
     return enriched
+
+
+def _weather_risk_score(weather: dict[str, object]) -> int:
+    rain = float(weather.get("rain_probability") or 0)
+    wind = float(weather.get("wind_kph") or 0)
+    cloud = float(weather.get("cloud_cover") or 0)
+    air_temp = float(weather.get("air_temp_c") or 0)
+    code = int(float(weather.get("weather_code") or 0))
+    rain_component = rain * 0.55
+    cloud_component = cloud * 0.18
+    wind_component = max(0, wind - 18) * 1.4
+    heat_component = max(0, air_temp - 28) * 3.0
+    code_component = _weather_code_severity(code)
+    return int(round(min(100, rain_component + cloud_component + wind_component + heat_component + code_component)))
+
+
+def _weather_code_severity(code: int) -> int:
+    if code >= 95:
+        return 35
+    if code >= 80:
+        return 25
+    if code >= 60:
+        return 18
+    if code >= 45:
+        return 10
+    return 0
+
+
+def _weather_risk_label(score: int) -> str:
+    if score >= 60:
+        return "high"
+    if score >= 30:
+        return "medium"
+    return "low"
+
+
+def _weather_risk_reason(weather: dict[str, object]) -> str:
+    rain = weather.get("rain_probability")
+    wind = weather.get("wind_kph")
+    cloud = weather.get("cloud_cover")
+    parts = []
+    if rain is not None:
+        parts.append(f"rain chance {float(rain):.0f}%")
+    if wind is not None:
+        parts.append(f"wind {float(wind):.0f} kph")
+    if cloud is not None:
+        parts.append(f"cloud {float(cloud):.0f}%")
+    return ", ".join(parts) if parts else "risk inputs unavailable"
 
 
 def _barcelona_sessions() -> list[dict[str, object]]:
     weather_by_time = _fetch_open_meteo_weather(BARCELONA_2026)
     sessions = []
     for name, starts_at in BARCELONA_2026_SESSIONS:
-        weather = _weather_for_session(weather_by_time, starts_at)
+        weather = _weather_for_session(weather_by_time, starts_at) or _fallback_session_weather(starts_at)
         sessions.append(
             {
                 "name": name,
@@ -295,6 +357,34 @@ def _barcelona_sessions() -> list[dict[str, object]]:
             }
         )
     return sessions
+
+
+def _fallback_session_weather(starts_at: str) -> dict[str, object]:
+    timestamp = pd.Timestamp(starts_at)
+    weather = {
+        "air_temp_c": 27.0 if timestamp.hour >= 13 else 24.0,
+        "rain_probability": 2.0,
+        "rainfall": 0.0,
+        "wind_kph": 11.0,
+        "cloud_cover": 12.0,
+        "weather_code": 0.0,
+        "source": "Fallback dry-weekend snapshot",
+    }
+    weather["forecast_window"] = [
+        {
+            "offset_hours": offset,
+            "rain_probability": 2.0,
+            "air_temp_c": weather["air_temp_c"],
+            "wind_kph": weather["wind_kph"],
+        }
+        for offset in range(3)
+    ]
+    weather["weather_risk_score"] = _weather_risk_score(weather)
+    weather["weather_risk_label"] = _weather_risk_label(weather["weather_risk_score"])
+    weather["weather_risk_reason"] = _weather_risk_reason(weather)
+    weather["risk_score"] = weather["weather_risk_score"]
+    weather["risk_label"] = weather["weather_risk_label"]
+    return weather
 
 
 def _synthesized_sessions(event: dict[str, object], weather: dict[str, object] | None) -> list[dict[str, object]]:
@@ -327,7 +417,7 @@ def _race_hub_payload(year: int, round_number: int) -> dict[str, object]:
             "race": BARCELONA_2026,
             "sessions": sessions,
             "weather_available": any(session.get("weather") for session in sessions),
-            "weather_note": "Weather is fetched live from Open-Meteo and matched to each local session hour.",
+            "weather_note": "Weather is fetched live from Open-Meteo when reachable, with a transparent fallback snapshot for demo uptime.",
         }
     event = _read_event_row(year, round_number)
     features = _feature_rows(year, round_number)
@@ -344,6 +434,13 @@ def _race_hub_payload(year: int, round_number: int) -> dict[str, object]:
         "race_date": event.get("race_date"),
         "qualifying_date": event.get("qualifying_date"),
     }
+    sessions = _synthesized_sessions(event, weather)
+    return {
+        "race": race,
+        "sessions": sessions,
+        "weather_available": any(session.get("weather") for session in sessions),
+        "weather_note": "Weather is estimated from processed feature data when live session weather is unavailable.",
+    }
 
 
 def _upcoming_weekend_payload() -> dict[str, object]:
@@ -352,7 +449,7 @@ def _upcoming_weekend_payload() -> dict[str, object]:
         "race": BARCELONA_2026,
         "sessions": sessions,
         "weather_available": any(session.get("weather") for session in sessions),
-        "weather_note": "Weather is fetched live from Open-Meteo and matched to each local session hour.",
+        "weather_note": "Weather is fetched live from Open-Meteo when reachable, with a transparent fallback snapshot for demo uptime.",
         "context": {
             "headline": "Antonelli enters as favorite after Monaco and current form.",
             "conditions": "Dry, warm, low rain risk if the live weather feed remains stable.",
@@ -399,7 +496,14 @@ def _cron_authorized(request: Request) -> None:
     expected = os.getenv("CRON_SECRET")
     if not expected:
         return
-    provided = request.query_params.get("secret") or request.headers.get("x-cron-secret")
+    authorization = request.headers.get("authorization", "")
+    authorization_parts = authorization.split(" ", 1)
+    bearer = (
+        authorization_parts[1].strip()
+        if len(authorization_parts) == 2 and authorization_parts[0].lower() == "bearer"
+        else None
+    )
+    provided = bearer or request.headers.get("x-cron-secret") or request.query_params.get("secret")
     if provided != expected:
         raise HTTPException(status_code=401, detail="Invalid cron secret.")
 
@@ -467,6 +571,7 @@ def _post_quali_race_forecast_payload() -> dict[str, object]:
             "predictions": [],
         }
 
+    baseline_lookup = {row.get("driver_code"): row for row in payload.get("predictions", [])}
     grid_lookup = {row["driver_code"]: float(row["actual_grid_position"]) for _, row in grid.iterrows()}
     adjusted = []
     for row in payload.get("predictions", []):
@@ -498,9 +603,26 @@ def _post_quali_race_forecast_payload() -> dict[str, object]:
     for row in adjusted:
         win_score = max(0.001, float(row.get("win_probability") or 0) * (1.75 - row["grid_position"] * 0.065))
         row["win_probability"] = round(win_score / total_win_score, 4)
+        baseline = baseline_lookup.get(row.get("driver_code"), {})
+        row["delta_win_probability"] = round(row["win_probability"] - float(baseline.get("win_probability") or 0), 4)
+        row["delta_podium_probability"] = round(
+            float(row.get("podium_probability") or 0) - float(baseline.get("podium_probability") or 0),
+            4,
+        )
+        row["delta_top10_probability"] = round(
+            float(row.get("top10_probability") or 0) - float(baseline.get("top10_probability") or 0),
+            4,
+        )
+        row["delta_expected_finish"] = round(
+            float(row.get("expected_finish") or 0) - float(baseline.get("expected_finish") or 0),
+            2,
+        )
     adjusted.sort(key=lambda row: (-float(row["win_probability"]), float(row["expected_finish"])))
     for index, row in enumerate(adjusted, start=1):
+        baseline = baseline_lookup.get(row.get("driver_code"), {})
         row["prediction_rank"] = index
+        baseline_rank = pd.to_numeric(baseline.get("prediction_rank"), errors="coerce")
+        row["delta_rank"] = int(index - baseline_rank) if pd.notna(baseline_rank) else None
 
     payload["metadata"]["forecast_state"] = "post-quali"
     payload["metadata"]["prediction_mode"] = "post-quali race forecast"
@@ -806,6 +928,295 @@ def _metadata(predictions: pd.DataFrame | None = None) -> dict[str, object]:
     return metadata
 
 
+def _read_parquet_if_exists(path: Path) -> pd.DataFrame:
+    return pd.read_parquet(path) if path.exists() else pd.DataFrame()
+
+
+def _history_schedule() -> pd.DataFrame:
+    schedule = _read_parquet_if_exists(readable_path(SCHEDULE_PATH, DEMO_SCHEDULE_PATH))
+    if schedule.empty:
+        events = _read_parquet_if_exists(readable_path(EVENTS_TABLE_PATH, DEMO_EVENTS_TABLE_PATH))
+        schedule = events.rename(columns={"season": "year"}).copy() if not events.empty else events
+    if "season" in schedule and "year" not in schedule:
+        schedule = schedule.rename(columns={"season": "year"})
+    return schedule
+
+
+def _history_races() -> pd.DataFrame:
+    rich = _read_parquet_if_exists(RICH_RACE_RESULTS_TABLE_PATH)
+    if not rich.empty:
+        return rich.rename(columns={"season": "year"}).copy()
+    races = _read_parquet_if_exists(readable_path(RACES_CLEAN_PATH, DEMO_RACES_CLEAN_PATH))
+    if "season" in races and "year" not in races:
+        races = races.rename(columns={"season": "year"})
+    return races
+
+
+def _history_qualifying() -> pd.DataFrame:
+    rich = _read_parquet_if_exists(RICH_QUALIFYING_TABLE_PATH)
+    if not rich.empty:
+        return rich.rename(columns={"season": "year"}).copy()
+    qualifying = _read_parquet_if_exists(readable_path(QUALIFYING_CLEAN_PATH, DEMO_QUALIFYING_CLEAN_PATH))
+    if "season" in qualifying and "year" not in qualifying:
+        qualifying = qualifying.rename(columns={"season": "year"})
+    return qualifying
+
+
+def _history_scope_metadata() -> dict[str, object]:
+    return {
+        "coverage": {
+            "broad_results": "packaged race, qualifying, and schedule tables where available",
+            "rich_session_detail": "local rich FastF1/OpenF1 lap, stint, weather, and telemetry tables when generated",
+            "deep_modern_detail": "OpenF1-enriched history from 2023 onward when local rich ingest has been run",
+        },
+        "mode_guidance": {
+            "basic": "race results, qualifying, podiums, fastest laps, and season summaries",
+            "geek": "lap tables, stints, weather overlays, sector data, and telemetry comparisons where available",
+        },
+    }
+
+
+def _history_records(df: pd.DataFrame, limit: int | None = None) -> list[dict[str, object]]:
+    if df.empty:
+        return []
+    payload = df.head(limit).copy() if limit is not None else df.copy()
+    payload = payload.map(_history_json_value)
+    return payload.where(pd.notna(payload), None).to_dict(orient="records")
+
+
+def _history_json_value(value: object) -> object:
+    if pd.isna(value):
+        return None
+    if isinstance(value, pd.Timedelta):
+        return round(value.total_seconds(), 6)
+    return _json_value(value)
+
+
+def _history_event_rows(year: int | None = None) -> pd.DataFrame:
+    events = _history_schedule()
+    if events.empty:
+        return events
+    events = events.copy()
+    events["year"] = pd.to_numeric(events["year"], errors="coerce").astype("Int64")
+    events["round"] = pd.to_numeric(events["round"], errors="coerce").astype("Int64")
+    if year is not None:
+        events = events[events["year"] == year]
+    return events.sort_values(["year", "round"])
+
+
+def _history_race_rows(year: int, round_number: int | None = None) -> pd.DataFrame:
+    races = _history_races()
+    if races.empty:
+        return races
+    races = races.copy()
+    races["year"] = pd.to_numeric(races["year"], errors="coerce").astype("Int64")
+    races["round"] = pd.to_numeric(races["round"], errors="coerce").astype("Int64")
+    races = races[races["year"] == year]
+    if round_number is not None:
+        races = races[races["round"] == round_number]
+    return races
+
+
+def _history_quali_rows(year: int, round_number: int | None = None) -> pd.DataFrame:
+    qualifying = _history_qualifying()
+    if qualifying.empty:
+        return qualifying
+    qualifying = qualifying.copy()
+    qualifying["year"] = pd.to_numeric(qualifying["year"], errors="coerce").astype("Int64")
+    qualifying["round"] = pd.to_numeric(qualifying["round"], errors="coerce").astype("Int64")
+    qualifying = qualifying[qualifying["year"] == year]
+    if round_number is not None:
+        qualifying = qualifying[qualifying["round"] == round_number]
+    return qualifying
+
+
+def _driver_at_position(rows: pd.DataFrame, position_column: str, position: int) -> str | None:
+    if rows.empty or position_column not in rows:
+        return None
+    frame = rows.copy()
+    frame[position_column] = pd.to_numeric(frame[position_column], errors="coerce")
+    target = frame[frame[position_column] == position]
+    return str(target.iloc[0]["driver_code"]) if not target.empty and pd.notna(target.iloc[0].get("driver_code")) else None
+
+
+def _sort_by_numeric(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    if df.empty or column not in df:
+        return df
+    frame = df.copy()
+    frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    return frame.sort_values(column, na_position="last")
+
+
+def _history_season_payload() -> dict[str, object]:
+    events = _history_event_rows()
+    races = _history_races()
+    if events.empty:
+        return {"seasons": [], "metadata": _history_scope_metadata()}
+    grouped = events.groupby("year", dropna=True).agg(event_count=("round", "nunique")).reset_index()
+    if not races.empty and "driver_code" in races:
+        race_counts = races.rename(columns={"season": "year"}).copy()
+        race_counts["year"] = pd.to_numeric(race_counts["year"], errors="coerce")
+        race_counts = race_counts.groupby("year", dropna=True).agg(result_rows=("driver_code", "count")).reset_index()
+        grouped = grouped.merge(race_counts, on="year", how="left")
+    return {"seasons": _history_records(grouped.sort_values("year", ascending=False)), "metadata": _history_scope_metadata()}
+
+
+def _history_year_payload(year: int) -> dict[str, object]:
+    events = _history_event_rows(year)
+    races = _history_race_rows(year)
+    qualifying = _history_quali_rows(year)
+    rows = []
+    for _, event in events.iterrows():
+        round_number = int(event["round"])
+        race_rows = races[races["round"] == round_number] if not races.empty else pd.DataFrame()
+        quali_rows = qualifying[qualifying["round"] == round_number] if not qualifying.empty else pd.DataFrame()
+        podium = (
+            _sort_by_numeric(race_rows, "finish_position").head(3)["driver_code"].dropna().astype(str).tolist()
+            if not race_rows.empty and "finish_position" in race_rows
+            else []
+        )
+        rows.append(
+            {
+                "year": year,
+                "round": round_number,
+                "event_name": event.get("event_name"),
+                "country": event.get("country"),
+                "location": event.get("location"),
+                "circuit": event.get("location") or event.get("event_name"),
+                "race_date": _json_value(event.get("race_date")),
+                "winner": _driver_at_position(race_rows, "finish_position", 1),
+                "pole": _driver_at_position(quali_rows, "qualifying_position", 1),
+                "podium": podium,
+                "result_rows": int(len(race_rows)),
+                "qualifying_rows": int(len(quali_rows)),
+            }
+        )
+    return {"year": year, "races": rows, "metadata": _history_scope_metadata()}
+
+
+def _history_lap_frame(year: int, round_number: int) -> pd.DataFrame:
+    laps = _read_parquet_if_exists(LAP_TIMES_TABLE_PATH)
+    if laps.empty:
+        return laps
+    if "season" in laps and "year" not in laps:
+        laps = laps.rename(columns={"season": "year"})
+    laps["year"] = pd.to_numeric(laps["year"], errors="coerce").astype("Int64")
+    laps["round"] = pd.to_numeric(laps["round"], errors="coerce").astype("Int64")
+    laps = laps[(laps["year"] == year) & (laps["round"] == round_number)].copy()
+    if "lap_time_seconds" not in laps and "lap_time" in laps:
+        laps["lap_time_seconds"] = pd.to_timedelta(laps["lap_time"], errors="coerce").dt.total_seconds()
+    return laps
+
+
+def _history_fastest_laps(year: int, round_number: int) -> list[dict[str, object]]:
+    laps = _history_lap_frame(year, round_number)
+    if laps.empty or "lap_time_seconds" not in laps:
+        return []
+    frame = laps.dropna(subset=["lap_time_seconds"]).sort_values("lap_time_seconds")
+    columns = [column for column in ["driver_code", "lap_number", "lap_time_seconds", "compound", "session_name"] if column in frame]
+    return _history_records(frame[columns].head(10))
+
+
+def _history_summary_payload(year: int, round_number: int) -> dict[str, object]:
+    events = _history_event_rows(year)
+    event = events[events["round"] == round_number]
+    race_rows = _sort_by_numeric(_history_race_rows(year, round_number), "finish_position")
+    quali_rows = _sort_by_numeric(_history_quali_rows(year, round_number), "qualifying_position")
+    return {
+        "event": _history_records(event.head(1))[0] if not event.empty else {"year": year, "round": round_number},
+        "podium": _history_records(race_rows.head(3)),
+        "race_results": _history_records(race_rows),
+        "qualifying_top10": _history_records(quali_rows.head(10)),
+        "fastest_laps": _history_fastest_laps(year, round_number),
+        "metadata": _history_scope_metadata(),
+    }
+
+
+def _history_laps_payload(year: int, round_number: int, limit: int = 250) -> dict[str, object]:
+    laps = _history_lap_frame(year, round_number)
+    columns = [
+        "driver_code",
+        "lap_number",
+        "stint_number",
+        "compound",
+        "lap_time_seconds",
+        "sector1_time",
+        "sector2_time",
+        "sector3_time",
+        "SpeedST",
+        "session_name",
+    ]
+    available = [column for column in columns if column in laps]
+    rows = _history_records(_sort_by_numeric(laps[available], "lap_number"), limit=limit) if available else []
+    return {
+        "year": year,
+        "round": round_number,
+        "rows": rows,
+        "metadata": {
+            **_history_scope_metadata(),
+            "available": not laps.empty,
+            "row_count": int(len(laps)),
+            "note": "Lap detail requires generated rich FastF1/OpenF1 artifacts.",
+        },
+    }
+
+
+def _history_driver_payload(driver_code: str) -> dict[str, object]:
+    code = driver_code.upper()
+    races = _history_races()
+    if races.empty or "driver_code" not in races:
+        return {"driver_code": code, "summary": {}, "results": [], "metadata": _history_scope_metadata()}
+    rows = races.rename(columns={"season": "year"}).copy()
+    rows = rows[rows["driver_code"].astype(str).str.upper() == code].copy()
+    if rows.empty:
+        return {"driver_code": code, "summary": {}, "results": [], "metadata": _history_scope_metadata()}
+    rows["finish_position"] = pd.to_numeric(rows.get("finish_position"), errors="coerce")
+    rows["grid_position"] = pd.to_numeric(rows.get("grid_position"), errors="coerce")
+    points = pd.to_numeric(rows.get("points"), errors="coerce").fillna(0) if "points" in rows else pd.Series(dtype=float)
+    summary = {
+        "starts": int(len(rows)),
+        "wins": int((rows["finish_position"] == 1).sum()),
+        "podiums": int((rows["finish_position"] <= 3).sum()),
+        "points": round(float(points.sum()), 2) if not points.empty else None,
+        "average_finish": round(float(rows["finish_position"].dropna().mean()), 2) if rows["finish_position"].notna().any() else None,
+        "average_grid": round(float(rows["grid_position"].dropna().mean()), 2) if rows["grid_position"].notna().any() else None,
+        "teams": sorted(rows.get("constructor_name", pd.Series(dtype=str)).dropna().astype(str).unique().tolist()),
+    }
+    return {
+        "driver_code": code,
+        "driver_name": rows["driver_name"].dropna().iloc[-1] if "driver_name" in rows and rows["driver_name"].notna().any() else code,
+        "summary": summary,
+        "results": _history_records(rows.sort_values(["year", "round"], ascending=[False, False]).head(60)),
+        "metadata": _history_scope_metadata(),
+    }
+
+
+def _history_team_payload(team_name: str) -> dict[str, object]:
+    races = _history_races()
+    if races.empty or "constructor_name" not in races:
+        return {"team_name": team_name, "summary": {}, "results": [], "metadata": _history_scope_metadata()}
+    rows = races.rename(columns={"season": "year"}).copy()
+    rows = rows[rows["constructor_name"].astype(str).str.lower().str.contains(team_name.lower(), regex=False)].copy()
+    if rows.empty:
+        return {"team_name": team_name, "summary": {}, "results": [], "metadata": _history_scope_metadata()}
+    rows["finish_position"] = pd.to_numeric(rows.get("finish_position"), errors="coerce")
+    points = pd.to_numeric(rows.get("points"), errors="coerce").fillna(0) if "points" in rows else pd.Series(dtype=float)
+    summary = {
+        "entries": int(len(rows)),
+        "wins": int((rows["finish_position"] == 1).sum()),
+        "podiums": int((rows["finish_position"] <= 3).sum()),
+        "points": round(float(points.sum()), 2) if not points.empty else None,
+        "average_finish": round(float(rows["finish_position"].dropna().mean()), 2) if rows["finish_position"].notna().any() else None,
+        "drivers": sorted(rows.get("driver_code", pd.Series(dtype=str)).dropna().astype(str).unique().tolist()),
+    }
+    return {
+        "team_name": rows["constructor_name"].dropna().iloc[-1] if rows["constructor_name"].notna().any() else team_name,
+        "summary": summary,
+        "results": _history_records(rows.sort_values(["year", "round"], ascending=[False, False]).head(80)),
+        "metadata": _history_scope_metadata(),
+    }
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(WEB_DIR / "index.html")
@@ -889,6 +1300,47 @@ def live_race_status() -> dict[str, object]:
             "pit_window_state",
         ],
     }
+
+
+@app.get("/api/history/seasons")
+def history_seasons() -> dict[str, object]:
+    return _history_season_payload()
+
+
+@app.get("/api/history/{year}/races")
+def history_races(year: int) -> dict[str, object]:
+    return _history_year_payload(year)
+
+
+@app.get("/api/history/{year}/{round_number}/summary")
+def history_race_summary(year: int, round_number: int) -> dict[str, object]:
+    return _history_summary_payload(year, round_number)
+
+
+@app.get("/api/history/{year}/{round_number}/qualifying")
+def history_qualifying(year: int, round_number: int) -> dict[str, object]:
+    qualifying = _sort_by_numeric(_history_quali_rows(year, round_number), "qualifying_position")
+    return {
+        "year": year,
+        "round": round_number,
+        "rows": _history_records(qualifying),
+        "metadata": _history_scope_metadata(),
+    }
+
+
+@app.get("/api/history/{year}/{round_number}/laps")
+def history_laps(year: int, round_number: int, limit: int = 250) -> dict[str, object]:
+    return _history_laps_payload(year, round_number, limit=max(1, min(limit, 1000)))
+
+
+@app.get("/api/history/drivers/{driver_code}")
+def history_driver(driver_code: str) -> dict[str, object]:
+    return _history_driver_payload(driver_code)
+
+
+@app.get("/api/history/teams/{team_name}")
+def history_team(team_name: str) -> dict[str, object]:
+    return _history_team_payload(team_name)
 
 
 @app.get("/api/cron/weather-refresh")

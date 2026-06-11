@@ -86,6 +86,10 @@ button:disabled {
   opacity: 0.65;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .actions,
 .tabs {
   align-items: center;
@@ -305,10 +309,19 @@ body[data-mode="geek"] .basic-only {
   border: 1px solid #2b3545;
   border-radius: 999px;
   color: #8f9bae;
+  display: grid;
   font-size: 12px;
   font-weight: 900;
+  gap: 2px;
   padding: 7px 10px;
   text-transform: uppercase;
+}
+
+.state-pill small {
+  color: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  opacity: 0.7;
 }
 
 .state-pill.available {
@@ -620,11 +633,141 @@ tbody tr:hover {
   max-width: 100%;
 }
 
+.finish-cell {
+  display: grid;
+  gap: 4px;
+}
+
+.finish-cell > span {
+  font-weight: 950;
+}
+
+.delta {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  justify-self: start;
+  line-height: 1;
+  padding: 4px 6px;
+}
+
+.delta.good {
+  background: rgba(45, 212, 191, 0.14);
+  color: #67e8f9;
+}
+
+.delta.bad {
+  background: rgba(225, 6, 0, 0.16);
+  color: #fca5a5;
+}
+
+.delta.flat {
+  background: rgba(170, 181, 197, 0.14);
+  color: #aab5c5;
+}
+
 .future-grid {
   display: grid;
   gap: 14px;
   grid-template-columns: repeat(3, 1fr);
   margin-top: 14px;
+}
+
+.history-controls {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.history-controls label {
+  color: #aab5c5;
+  display: grid;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 4px;
+  text-transform: uppercase;
+}
+
+.history-controls input,
+.history-controls select {
+  background: #0d121b;
+  border: 1px solid #2b3545;
+  border-radius: 6px;
+  color: #f5f7fb;
+  font: inherit;
+  min-height: 36px;
+  min-width: 130px;
+  padding: 0 10px;
+}
+
+.history-layout {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 0.9fr 1.6fr;
+  margin-top: 14px;
+}
+
+.history-detail {
+  min-width: 0;
+}
+
+.race-list {
+  display: grid;
+  gap: 8px;
+  max-height: 520px;
+  overflow: auto;
+}
+
+.race-list-item {
+  background: #0d121b;
+  border: 1px solid #263244;
+  border-left: 4px solid #e10600;
+  border-radius: 6px;
+  color: #f5f7fb;
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  min-height: 0;
+  padding: 12px;
+  text-align: left;
+}
+
+.race-list-item span,
+.race-list-item small {
+  color: #aab5c5;
+}
+
+.history-summary-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.history-summary-grid div {
+  background: #0d121b;
+  border: 1px solid #263244;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.history-summary-grid span {
+  color: #aab5c5;
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.history-summary-grid strong {
+  font-size: 16px;
+}
+
+.compact-table table {
+  min-width: 720px;
 }
 
 .benchmark-card {
