@@ -293,6 +293,34 @@ body[data-mode="geek"] .basic-only {
   padding: 14px 16px;
 }
 
+.state-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.state-pill {
+  background: #111722;
+  border: 1px solid #2b3545;
+  border-radius: 999px;
+  color: #8f9bae;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 7px 10px;
+  text-transform: uppercase;
+}
+
+.state-pill.available {
+  color: #d7deea;
+}
+
+.state-pill.current {
+  background: rgba(225, 6, 0, 0.18);
+  border-color: #e10600;
+  color: #ffffff;
+}
+
 .weather-note,
 .status {
   font-size: 14px;

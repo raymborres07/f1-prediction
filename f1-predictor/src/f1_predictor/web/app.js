@@ -22,6 +22,7 @@ const geekModeButton = document.querySelector("#geek-mode");
 const qualifyingTab = document.querySelector("#qualifying-tab");
 const raceTab = document.querySelector("#race-tab");
 const basicNoteEl = document.querySelector("#basic-note");
+const forecastStatesEl = document.querySelector("#forecast-states");
 
 let countdownTimer = null;
 let activeMode = "basic";
@@ -29,6 +30,7 @@ let activeForecast = "race";
 let racePayload = null;
 let qualifyingPayload = null;
 let weekendPayload = null;
+let statesPayload = null;
 
 function formatDate(value, timeZone) {
   if (!value || value === "NaT") return "TBD";
@@ -336,6 +338,21 @@ function renderBasicNote(metadata, weekend) {
   `;
 }
 
+function renderForecastStates(payload) {
+  const states = payload?.states ?? [];
+  if (!states.length) {
+    forecastStatesEl.innerHTML = `<span>Forecast state unavailable</span>`;
+    return;
+  }
+  forecastStatesEl.innerHTML = states
+    .map((state) => `
+      <span class="state-pill ${state.available ? "available" : "pending"} ${state.state === payload.current_state ? "current" : ""}">
+        ${state.state}
+      </span>
+    `)
+    .join("");
+}
+
 function findDriver(rows = [], code) {
   return rows.find((row) => row.driver_code === code);
 }
@@ -483,12 +500,17 @@ async function loadPredictions() {
   try {
     const [weekendResponse, raceResponse, qualifyingResponse] = await Promise.all([
       fetch("/api/weekend/current"),
-      fetch("/api/predictions/race/next"),
+      fetch("/api/predictions/race/post-quali/next"),
       fetch("/api/predictions/qualifying/next"),
     ]);
+    const statesResponse = await fetch("/api/forecast-states");
     weekendPayload = await weekendResponse.json();
-    racePayload = await raceResponse.json();
+    const candidateRacePayload = await raceResponse.json();
+    racePayload = candidateRacePayload.predictions?.length
+      ? candidateRacePayload
+      : await (await fetch("/api/predictions/race/next")).json();
     qualifyingPayload = await qualifyingResponse.json();
+    statesPayload = statesResponse.ok ? await statesResponse.json() : { states: [] };
     if (!weekendResponse.ok || !raceResponse.ok || !qualifyingResponse.ok) {
       throw new Error("Failed to load weekend forecast");
     }
@@ -496,6 +518,7 @@ async function loadPredictions() {
     renderMetadata(racePayload.metadata ?? {}, weekendPayload);
     renderSessions(weekendPayload);
     renderBasicNote(racePayload.metadata ?? {}, weekendPayload);
+    renderForecastStates(statesPayload);
     renderForecastTables();
     if (activeMode === "geek") await loadGeekReports();
     statusEl.textContent = `Updated ${new Date().toLocaleTimeString()} - ${racePayload.metadata?.prediction_mode ?? "pre-weekend forecast"}`;

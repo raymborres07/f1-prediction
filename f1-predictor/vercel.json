@@ -11,5 +11,15 @@
       "src": "/(.*)",
       "dest": "api/index.py"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/weather-refresh",
+      "schedule": "0 */3 * * 5,6,0"
+    },
+    {
+      "path": "/api/cron/demo-artifact-refresh",
+      "schedule": "30 6 * * 5,6,0"
+    }
   ]
 }

@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -28,11 +28,13 @@ from f1_predictor.settings import (
     DEMO_MODEL_BUNDLE_PATH,
     DEMO_MODEL_METADATA_PATH,
     DEMO_PRE_RACE_FEATURES_TABLE_PATH,
+    DEMO_QUALIFYING_CLEAN_PATH,
     DEMO_SCHEDULE_PATH,
     EVENTS_TABLE_PATH,
     MODEL_BUNDLE_PATH,
     MODEL_METADATA_PATH,
     PRE_RACE_FEATURES_TABLE_PATH,
+    QUALIFYING_CLEAN_PATH,
     SCHEDULE_PATH,
     SIMULATION_DISTRIBUTIONS_PATH,
     SIMULATION_METADATA_PATH,
@@ -373,6 +375,7 @@ def _current_forecast_payload() -> dict[str, object]:
         except Exception:
             payload = _simulation_demo_predictions()
     payload["race"] = BARCELONA_2026
+    payload["metadata"]["forecast_state"] = "pre-weekend"
     payload["metadata"]["prediction_mode"] = "pre-weekend race forecast"
     payload["metadata"]["data_freshness"] = "practice and qualifying pending for Barcelona-Catalunya"
     payload["metadata"]["data_included"] = {
@@ -389,6 +392,126 @@ def _current_forecast_payload() -> dict[str, object]:
         row["qualifying_position"] = None
         row["has_quali_data"] = 0
         row["data_freshness"] = "pre-weekend forecast"
+    return payload
+
+
+def _cron_authorized(request: Request) -> None:
+    expected = os.getenv("CRON_SECRET")
+    if not expected:
+        return
+    provided = request.query_params.get("secret") or request.headers.get("x-cron-secret")
+    if provided != expected:
+        raise HTTPException(status_code=401, detail="Invalid cron secret.")
+
+
+def _forecast_states_payload() -> dict[str, object]:
+    grid_available = not _actual_grid(BARCELONA_2026["year"], BARCELONA_2026["round"]).empty
+    return {
+        "current_state": "post-quali" if grid_available else "pre-weekend",
+        "states": [
+            {
+                "state": "pre-weekend",
+                "available": True,
+                "description": "Baseline forecast before Barcelona practice and qualifying are included.",
+            },
+            {
+                "state": "post-FP2",
+                "available": False,
+                "description": "Activates after FP1/FP2 practice features are refreshed.",
+            },
+            {
+                "state": "post-FP3",
+                "available": False,
+                "description": "Activates after FP3 practice features are refreshed.",
+            },
+            {
+                "state": "post-quali",
+                "available": grid_available,
+                "description": "Race forecast regenerated with the actual qualifying grid.",
+            },
+            {
+                "state": "live-race",
+                "available": False,
+                "description": "Reserved for lap-by-lap race probability updates.",
+            },
+        ],
+    }
+
+
+def _actual_grid(year: int, round_number: int) -> pd.DataFrame:
+    qualifying_path = readable_path(QUALIFYING_CLEAN_PATH, DEMO_QUALIFYING_CLEAN_PATH)
+    if not qualifying_path.exists():
+        return pd.DataFrame()
+    qualifying = pd.read_parquet(qualifying_path)
+    year_column = "year" if "year" in qualifying else "season"
+    target = qualifying[(qualifying[year_column] == year) & (qualifying["round"] == round_number)].copy()
+    if target.empty:
+        return target
+    position_column = "qualifying_position" if "qualifying_position" in target else "grid_position"
+    target["actual_grid_position"] = pd.to_numeric(target[position_column], errors="coerce")
+    return target[["driver_code", "actual_grid_position"]].dropna()
+
+
+def _post_quali_race_forecast_payload() -> dict[str, object]:
+    payload = _current_forecast_payload()
+    grid = _actual_grid(BARCELONA_2026["year"], BARCELONA_2026["round"])
+    if grid.empty:
+        return {
+            "race": BARCELONA_2026,
+            "metadata": {
+                "forecast_state": "post-quali-unavailable",
+                "prediction_mode": "post-qualifying race forecast unavailable",
+                "data_freshness": "actual qualifying grid not available yet",
+                "note": "This endpoint activates after qualifying rows or starting-grid data are available. Until then, use the pre-weekend race forecast.",
+            },
+            "predictions": [],
+        }
+
+    grid_lookup = {row["driver_code"]: float(row["actual_grid_position"]) for _, row in grid.iterrows()}
+    adjusted = []
+    for row in payload.get("predictions", []):
+        grid_position = grid_lookup.get(row.get("driver_code"))
+        if grid_position is None:
+            continue
+        grid_factor = max(0.35, 1.55 - (grid_position - 1) * 0.055)
+        expected_finish = float(row.get("expected_finish") or 12)
+        adjusted_finish = 0.48 * expected_finish + 0.52 * grid_position
+        podium = min(0.98, max(0.01, float(row.get("podium_probability") or 0) * grid_factor))
+        top10 = min(0.995, max(0.03, float(row.get("top10_probability") or 0) * (1.2 - min(grid_position, 22) / 70)))
+        adjusted.append(
+            {
+                **row,
+                "grid_position": grid_position,
+                "qualifying_position": grid_position,
+                "has_quali_data": 1,
+                "expected_finish": round(adjusted_finish, 2),
+                "finish_low": max(1, round(adjusted_finish - 2.2, 1)),
+                "finish_high": min(22, round(adjusted_finish + 3.5, 1)),
+                "podium_probability": round(podium, 4),
+                "top10_probability": round(top10, 4),
+                "prediction_mode": "post-quali race forecast",
+                "data_freshness": "actual qualifying grid included",
+            }
+        )
+
+    total_win_score = sum(max(0.001, float(row.get("win_probability") or 0) * (1.75 - row["grid_position"] * 0.065)) for row in adjusted) or 1
+    for row in adjusted:
+        win_score = max(0.001, float(row.get("win_probability") or 0) * (1.75 - row["grid_position"] * 0.065))
+        row["win_probability"] = round(win_score / total_win_score, 4)
+    adjusted.sort(key=lambda row: (-float(row["win_probability"]), float(row["expected_finish"])))
+    for index, row in enumerate(adjusted, start=1):
+        row["prediction_rank"] = index
+
+    payload["metadata"]["forecast_state"] = "post-quali"
+    payload["metadata"]["prediction_mode"] = "post-quali race forecast"
+    payload["metadata"]["data_freshness"] = "actual qualifying grid included"
+    payload["metadata"]["data_included"] = {
+        "practice": False,
+        "qualifying": True,
+        "upgrade_news": True,
+        "simulation": True,
+    }
+    payload["predictions"] = adjusted
     return payload
 
 
@@ -428,6 +551,7 @@ def _qualifying_forecast_payload() -> dict[str, object]:
     return {
         "race": BARCELONA_2026,
         "metadata": {
+            "forecast_state": "pre-weekend",
             "prediction_mode": "pre-qualifying forecast",
             "data_freshness": "practice and qualifying pending for Barcelona-Catalunya",
             "note": "Qualifying probabilities are derived from current race forecast strength and practice-adjusted pace signals until live Barcelona practice data is available.",
@@ -719,6 +843,11 @@ def current_weekend() -> dict[str, object]:
     return _upcoming_weekend_payload()
 
 
+@app.get("/api/forecast-states")
+def forecast_states() -> dict[str, object]:
+    return _forecast_states_payload()
+
+
 @app.get("/api/benchmarks/monaco-2026")
 def monaco_2026_benchmark() -> dict[str, object]:
     return _monaco_benchmark_payload()
@@ -737,6 +866,57 @@ def qualifying_predictions_next() -> dict[str, object]:
 @app.get("/api/predictions/race/next")
 def race_predictions_next() -> dict[str, object]:
     return _current_forecast_payload()
+
+
+@app.get("/api/predictions/race/post-quali/next")
+def post_quali_race_predictions_next() -> dict[str, object]:
+    return _post_quali_race_forecast_payload()
+
+
+@app.get("/api/live-race/status")
+def live_race_status() -> dict[str, object]:
+    return {
+        "state": "live-race",
+        "available": False,
+        "race": BARCELONA_2026,
+        "message": "Live race mode is a separate forecast state and will activate when lap timing, safety-car state, tyre state, and live leaderboard data are connected.",
+        "expected_payload": [
+            "lap",
+            "leaderboard",
+            "win_probability_by_driver",
+            "safety_car_mode",
+            "tyre_state",
+            "pit_window_state",
+        ],
+    }
+
+
+@app.get("/api/cron/weather-refresh")
+def cron_weather_refresh(request: Request) -> dict[str, object]:
+    _cron_authorized(request)
+    weekend = _upcoming_weekend_payload()
+    return {
+        "ok": True,
+        "job": "weather-refresh",
+        "race": weekend["race"],
+        "weather_available": weekend["weather_available"],
+        "sessions_refreshed": len(weekend["sessions"]),
+        "note": "Vercel cron can call this endpoint to refresh/check live weather. Serverless runtime does not commit generated artifacts.",
+    }
+
+
+@app.get("/api/cron/demo-artifact-refresh")
+def cron_demo_artifact_refresh(request: Request) -> dict[str, object]:
+    _cron_authorized(request)
+    simulation_metadata_path = readable_path(SIMULATION_METADATA_PATH, DEMO_SIMULATION_METADATA_PATH)
+    metadata = json.loads(simulation_metadata_path.read_text(encoding="utf-8")) if simulation_metadata_path.exists() else {}
+    return {
+        "ok": True,
+        "job": "demo-artifact-refresh",
+        "packaged_simulation_available": readable_path(SIMULATION_SUMMARY_PATH, DEMO_SIMULATION_SUMMARY_PATH).exists(),
+        "packaged_metadata": metadata,
+        "note": "This lightweight cron endpoint reports packaged artifact readiness. Full parquet regeneration still runs in the local pipeline before commit/deploy.",
+    }
 
 
 @app.get("/api/predictions/simulation-demo")
