@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -122,6 +123,91 @@ def _simulation_payload(season: int | None = None, round_number: int | None = No
     }
 
 
+def _finish_band_from_distribution(row: dict[str, object]) -> tuple[int | None, int | None]:
+    probabilities = []
+    for key, value in row.items():
+        if key.startswith("p") and key.endswith("_probability"):
+            try:
+                probabilities.append((int(key[1:].split("_", 1)[0]), float(value or 0)))
+            except (TypeError, ValueError):
+                continue
+    probabilities.sort()
+    cumulative = 0.0
+    low = None
+    high = None
+    for position, probability in probabilities:
+        cumulative += probability
+        if low is None and cumulative >= 0.1:
+            low = position
+        if high is None and cumulative >= 0.9:
+            high = position
+            break
+    return low, high
+
+
+def _should_use_simulation_demo_homepage() -> bool:
+    simulation_path = readable_path(SIMULATION_SUMMARY_PATH, DEMO_SIMULATION_SUMMARY_PATH)
+    if not simulation_path.exists():
+        return False
+    return os.getenv("F1_PREDICTOR_USE_DEMO_DATA") == "1" or not SIMULATION_SUMMARY_PATH.exists()
+
+
+def _simulation_demo_predictions() -> dict[str, object]:
+    payload = _simulation_payload()
+    metadata = payload.get("metadata", {})
+    distributions = {
+        row.get("driver_code"): row
+        for row in payload.get("finish_distributions", [])
+        if row.get("driver_code") is not None
+    }
+    predictions = []
+    for row in payload.get("predictions", []):
+        low, high = _finish_band_from_distribution(distributions.get(row.get("driver_code"), {}))
+        predictions.append(
+            {
+                "prediction_rank": row.get("simulation_rank"),
+                "year": row.get("season"),
+                "round": row.get("round"),
+                "event_name": f"{row.get('season')} Round {row.get('round')} simulation",
+                "driver_code": row.get("driver_code"),
+                "driver_name": row.get("driver_name"),
+                "constructor_name": row.get("constructor_name"),
+                "grid_position": None,
+                "qualifying_position": None,
+                "win_probability": row.get("win_probability"),
+                "podium_probability": row.get("podium_probability"),
+                "top10_probability": row.get("top10_probability"),
+                "expected_finish": row.get("expected_finish"),
+                "finish_low": low,
+                "finish_high": high,
+                "driver_last3_avg_finish": None,
+                "constructor_last5_avg_finish": None,
+                "driver_circuit_avg_finish": None,
+                "teammate_quali_delta": None,
+                "has_quali_data": 0,
+                "data_freshness": "Monte Carlo packaged demo",
+                "prediction_mode": "race simulation",
+                "model_version": "monte-carlo-simulation",
+                "trained_at_utc": metadata.get("built_at_utc"),
+                "dataset_version": metadata.get("rich_dataset"),
+                "explanation": "Monte Carlo simulation from packaged rich artifacts.",
+                "feature_contributions": [],
+            }
+        )
+    race = {
+        "year": payload["race"]["year"],
+        "round": payload["race"]["round"],
+        "event_name": f"{payload['race']['year']} Round {payload['race']['round']} simulation",
+        "location": "Packaged demo",
+        "race_date": metadata.get("built_at_utc"),
+    }
+    response_metadata = _metadata()
+    response_metadata["prediction_mode"] = "race simulation"
+    response_metadata["data_freshness"] = "Monte Carlo packaged demo"
+    response_metadata["simulation"] = metadata
+    return {"race": race, "metadata": response_metadata, "predictions": predictions}
+
+
 def _metadata(predictions: pd.DataFrame | None = None) -> dict[str, object]:
     metadata: dict[str, object] = {}
     model_metadata_path = readable_path(MODEL_METADATA_PATH, DEMO_MODEL_METADATA_PATH)
@@ -189,6 +275,8 @@ def api_next_race() -> dict[str, object]:
 
 @app.get("/api/predictions/next")
 def predictions_next() -> dict[str, object]:
+    if _should_use_simulation_demo_homepage():
+        return _simulation_demo_predictions()
     try:
         race = next_race()
         predictions = predict_race(int(race["year"]), int(race["round"]))
