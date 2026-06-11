@@ -102,7 +102,7 @@ def _qualifying_frame(qualifying: pd.DataFrame, grid: pd.DataFrame) -> pd.DataFr
         q["qualifying_position"] = pd.to_numeric(q.get("qualifying_position"), errors="coerce")
         if "best_qualifying_seconds" in q:
             q["qualifying_gap_to_pole"] = q.groupby(["season", "round"])["best_qualifying_seconds"].transform(lambda s: s - s.min())
-        pieces.append(q[["season", "round", "driver_number", "qualifying_position", "qualifying_gap_to_pole", "constructor_name"]])
+        pieces.append(q[["season", "round", "driver_number", "qualifying_position", "qualifying_gap_to_pole"]])
     if not grid.empty:
         g = grid.rename(columns={"position": "grid_position", "driver_number": "driver_number"}).copy()
         for column in ("season", "meeting_key"):

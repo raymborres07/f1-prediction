@@ -36,6 +36,20 @@ from f1_predictor.settings import (
 
 
 SESSION_CODES = ["FP1", "FP2", "FP3", "Q", "SQ", "S", "R"]
+NUMERIC_IDENTIFIER_COLUMNS = {
+    "season",
+    "round",
+    "driver_number",
+    "meeting_key",
+    "session_key",
+    "lap_number",
+    "stint_number",
+    "position",
+    "grid_position",
+    "finish_position",
+    "qualifying_position",
+    "points",
+}
 
 
 def _seconds(value: object) -> float:
@@ -45,6 +59,22 @@ def _seconds(value: object) -> float:
         return pd.Timedelta(value).total_seconds()
     except (TypeError, ValueError):
         return np.nan
+
+
+def _parquet_safe(table: pd.DataFrame) -> pd.DataFrame:
+    if table.empty:
+        return table
+    out = table.copy()
+    for column in NUMERIC_IDENTIFIER_COLUMNS.intersection(out.columns):
+        out[column] = pd.to_numeric(out[column], errors="coerce")
+    for column in out.select_dtypes(include=["object"]).columns:
+        values = out[column].dropna()
+        if values.empty:
+            continue
+        types = {type(value) for value in values.head(500)}
+        if len(types) > 1:
+            out[column] = out[column].astype("string")
+    return out
 
 
 def _session_safe(year: int, round_number: int, code: str, load_laps: bool = False, load_weather: bool = False):
@@ -136,8 +166,11 @@ def _fastf1_results_and_laps(events: pd.DataFrame, version: str, include_laps: b
                 results.insert(0, "round", round_number)
                 results.insert(0, "season", year)
                 sink.append(results)
-            if include_laps and hasattr(session, "laps") and not session.laps.empty:
-                laps = session.laps.copy()
+            if include_laps and code in {"FP1", "FP2", "FP3", "R"}:
+                laps_source = getattr(session, "_laps", None)
+                if laps_source is None or laps_source.empty:
+                    continue
+                laps = laps_source.copy()
                 laps["season"] = year
                 laps["round"] = round_number
                 laps["session_name"] = code
@@ -589,6 +622,8 @@ def build_rich_dataset(
         ],
     }
     for name, table in tables.items():
+        table = _parquet_safe(table)
+        tables[name] = table
         table.to_parquet(paths[name], index=False)
         table.to_parquet(RICH_PROCESSED_DIR / f"{name}_{version}.parquet", index=False)
         metadata["tables"][name] = {"rows": int(len(table)), "path": str(paths[name])}
