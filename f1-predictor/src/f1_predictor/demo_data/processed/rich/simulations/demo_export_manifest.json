@@ -1,0 +1,17 @@
+{
+  "exported_at_utc": "2026-06-11T02:00:55Z",
+  "copied": [
+    "processed/latest_predictions.parquet",
+    "processed/rich/simulations/simulation_summary.parquet",
+    "processed/rich/simulations/finish_distributions.parquet",
+    "processed/rich/simulations/simulation_metadata.json",
+    "metrics/podium_calibration.csv",
+    "metrics/backtest_metrics.csv",
+    "metrics/train_metrics.json"
+  ],
+  "skipped_optional": [],
+  "notes": [
+    "These files are packaged with the app for Vercel/demo fallback mode.",
+    "The API reads them when F1_PREDICTOR_USE_DEMO_DATA=1 or local generated artifacts are absent."
+  ]
+}

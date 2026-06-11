@@ -60,6 +60,7 @@ f1-upgrade-news
 f1-features
 f1-features-rich
 f1-simulate --simulations 10000
+f1-export-demo
 f1-train
 f1-backtest
 f1-predict-next
@@ -112,6 +113,14 @@ vercel
 ```
 
 The production app serves the FastAPI API and mounted static frontend as one product. Local generated artifacts under `data/` are ignored by Git; refresh committed demo artifacts intentionally after retraining.
+
+To package the latest generated predictions and Monte Carlo outputs for Vercel fallback mode:
+
+```powershell
+f1-export-demo
+```
+
+This copies `latest_predictions`, simulation summary, finish distributions, simulation metadata, and dashboard metric files into `src/f1_predictor/demo_data`.
 
 ## Notes
 

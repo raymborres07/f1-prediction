@@ -30,9 +30,14 @@ f1_predictor = [
   "web/*.js",
   "demo_data/processed/*.parquet",
   "demo_data/processed/*.json",
+  "demo_data/processed/rich/*.parquet",
+  "demo_data/processed/rich/*.json",
+  "demo_data/processed/rich/simulations/*.parquet",
+  "demo_data/processed/rich/simulations/*.json",
   "demo_data/models/*.joblib",
   "demo_data/models/*.json",
   "demo_data/metrics/*.csv",
+  "demo_data/metrics/*.json",
 ]
 
 [project.scripts]
@@ -48,4 +53,5 @@ f1-backtest = "f1_predictor.models.backtest:main"
 f1-predict-next = "f1_predictor.models.predict:main"
 f1-retrain = "f1_predictor.pipeline:main"
 f1-demo = "f1_predictor.demo:main"
+f1-export-demo = "f1_predictor.demo_export:main"
 f1-serve = "f1_predictor.api.serve:main"

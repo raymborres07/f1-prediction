@@ -1,0 +1,9 @@
+{
+  "win_brier": 0.03339502621563465,
+  "podium_brier": 0.07717154566222685,
+  "top10_brier": 0.17823278766525633,
+  "podium_auc": 0.9268627450980391,
+  "finish_mae": 3.532637614444428,
+  "train_rows": 758,
+  "validation_rows": 200
+}

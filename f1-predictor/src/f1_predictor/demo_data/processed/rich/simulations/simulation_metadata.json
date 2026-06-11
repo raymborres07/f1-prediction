@@ -1,0 +1,17 @@
+{
+  "built_at_utc": "2026-06-11T01:16:33Z",
+  "season": 2023,
+  "round": 22,
+  "simulations": 10000,
+  "seed": 42,
+  "model_components": [
+    "latent_race_pace",
+    "reliability_risk",
+    "start_performance",
+    "tyre_degradation",
+    "pit_stop_loss",
+    "overtaking_strength",
+    "defending_strength"
+  ],
+  "rich_dataset": "20260611011244"
+}

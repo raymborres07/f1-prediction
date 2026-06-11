@@ -16,6 +16,9 @@ from f1_predictor.settings import (
     DEMO_BACKTEST_METRICS_PATH,
     DEMO_CALIBRATION_REPORT_PATH,
     DEMO_DATASET_METADATA_PATH,
+    DEMO_SIMULATION_DISTRIBUTIONS_PATH,
+    DEMO_SIMULATION_METADATA_PATH,
+    DEMO_SIMULATION_SUMMARY_PATH,
     DEMO_MODEL_BUNDLE_PATH,
     DEMO_MODEL_METADATA_PATH,
     DEMO_SCHEDULE_PATH,
@@ -85,11 +88,14 @@ def _simulation_records(df: pd.DataFrame) -> list[dict[str, object]]:
 
 
 def _simulation_payload(season: int | None = None, round_number: int | None = None) -> dict[str, object]:
-    if not SIMULATION_SUMMARY_PATH.exists():
+    summary_path = readable_path(SIMULATION_SUMMARY_PATH, DEMO_SIMULATION_SUMMARY_PATH)
+    distributions_path = readable_path(SIMULATION_DISTRIBUTIONS_PATH, DEMO_SIMULATION_DISTRIBUTIONS_PATH)
+    metadata_path = readable_path(SIMULATION_METADATA_PATH, DEMO_SIMULATION_METADATA_PATH)
+    if not summary_path.exists():
         raise HTTPException(status_code=404, detail="Run f1-simulate first to generate Monte Carlo outputs.")
-    summary = pd.read_parquet(SIMULATION_SUMMARY_PATH)
-    distributions = pd.read_parquet(SIMULATION_DISTRIBUTIONS_PATH) if SIMULATION_DISTRIBUTIONS_PATH.exists() else pd.DataFrame()
-    metadata = json.loads(SIMULATION_METADATA_PATH.read_text(encoding="utf-8")) if SIMULATION_METADATA_PATH.exists() else {}
+    summary = pd.read_parquet(summary_path)
+    distributions = pd.read_parquet(distributions_path) if distributions_path.exists() else pd.DataFrame()
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else {}
     if season is None or round_number is None:
         if summary.empty:
             raise HTTPException(status_code=404, detail="Simulation summary is empty.")
@@ -169,7 +175,7 @@ def health() -> dict[str, object]:
         "has_dataset_metadata": readable_path(DATASET_METADATA_PATH, DEMO_DATASET_METADATA_PATH).exists(),
         "has_calibration_report": readable_path(CALIBRATION_REPORT_PATH, DEMO_CALIBRATION_REPORT_PATH).exists(),
         "has_backtest_metrics": readable_path(BACKTEST_METRICS_PATH, DEMO_BACKTEST_METRICS_PATH).exists(),
-        "has_simulation_summary": SIMULATION_SUMMARY_PATH.exists(),
+        "has_simulation_summary": readable_path(SIMULATION_SUMMARY_PATH, DEMO_SIMULATION_SUMMARY_PATH).exists(),
     }
 
 
