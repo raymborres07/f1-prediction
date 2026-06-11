@@ -6,6 +6,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
@@ -63,8 +64,18 @@ class OpenF1Client:
             url = f"{BASE_URL}/{endpoint}"
             if clean_params:
                 url = f"{url}?{urlencode(clean_params)}"
+        try:
             with urlopen(url, timeout=60) as response:
                 data = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            if exc.code in {404, 429, 500, 502, 503, 504}:
+                print(f"OpenF1 {endpoint} unavailable ({exc.code}); using empty cached response.")
+                data = []
+            else:
+                raise
+        except URLError as exc:
+            print(f"OpenF1 {endpoint} unavailable ({exc.reason}); using empty cached response.")
+            data = []
             path.write_text(json.dumps(data, indent=2), encoding="utf-8")
             time.sleep(self.sleep_seconds)
         return pd.DataFrame(data)
