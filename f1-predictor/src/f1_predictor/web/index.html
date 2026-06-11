@@ -10,7 +10,7 @@
     <main class="shell">
       <section class="header">
         <div>
-          <p class="eyebrow">Next race model</p>
+          <p class="eyebrow">Race Hub</p>
           <h1>F1 Predictor</h1>
         </div>
         <div class="actions">
@@ -19,12 +19,41 @@
         </div>
       </section>
 
-      <section class="race-strip" id="race">
-        <span>Loading race</span>
+      <nav class="tabs" aria-label="Product sections">
+        <button class="tab active" type="button">Race Hub</button>
+        <button class="tab" type="button">Live Race</button>
+        <button class="tab" type="button">History</button>
+        <button class="tab" type="button">Driver Ratings</button>
+        <button class="tab" type="button">Compatibility Lab</button>
+        <button class="tab" type="button">What-If Matchups</button>
+      </nav>
+
+      <section class="race-hero">
+        <div class="race-card" id="race">
+          <span>Loading race</span>
+        </div>
+        <div class="countdown-card">
+          <span class="label">Countdown</span>
+          <strong id="countdown">Loading</strong>
+          <span id="countdown-target">Race start</span>
+        </div>
       </section>
 
       <section class="meta-strip" id="metadata">
         <span>Loading model metadata</span>
+      </section>
+
+      <section class="schedule-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Weekend Schedule</p>
+            <h2>Session times and weather</h2>
+          </div>
+          <span class="weather-note" id="weather-note">Loading weather</span>
+        </div>
+        <div class="session-grid" id="sessions">
+          <span>Loading sessions</span>
+        </div>
       </section>
 
       <section class="panel-grid">
@@ -34,8 +63,9 @@
             <span>Loading metrics</span>
           </div>
         </section>
-        <section class="panel">
-          <h2>Podium Reliability</h2>
+        <section class="panel calibration-panel">
+          <h2>How trustworthy are these podium probabilities?</h2>
+          <p class="panel-copy">If the model gives 40% podium odds to many drivers, about 40% of them should actually podium over time.</p>
           <div class="reliability" id="reliability">
             <span>Loading calibration</span>
           </div>
@@ -48,11 +78,18 @@
         </section>
       </section>
 
+      <section class="section-heading table-heading">
+        <div>
+          <p class="eyebrow">Forecast</p>
+          <h2>Main predictions</h2>
+        </div>
+        <span class="status" id="status"></span>
+      </section>
+
       <section class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Rank</th>
               <th>Driver</th>
               <th>Team</th>
               <th>Grid</th>
@@ -60,8 +97,9 @@
               <th>Podium</th>
               <th>Top 10</th>
               <th>Expected Finish</th>
-              <th>Why</th>
-              <th>Freshness</th>
+              <th>Uncertainty</th>
+              <th>Recent Form</th>
+              <th>Practice Pace</th>
             </tr>
           </thead>
           <tbody id="predictions">
@@ -72,7 +110,31 @@
         </table>
       </section>
 
-      <p class="status" id="status"></p>
+      <section class="history-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Historical Context</p>
+            <h2>Monaco benchmark and future tools</h2>
+          </div>
+        </div>
+        <div class="benchmark-card" id="benchmark">
+          <span>Loading Monaco benchmark</span>
+        </div>
+        <div class="future-grid">
+          <article>
+            <h3>Driver and team trajectories</h3>
+            <p>Season arcs, circuit history, form swings, and teammate comparisons.</p>
+          </article>
+          <article>
+            <h3>Live Race</h3>
+            <p>In-race win probability updates and strategy state once live timing is wired in.</p>
+          </article>
+          <article>
+            <h3>Lab</h3>
+            <p>Speculative what-if tools for compatibility, ratings, and cross-era matchups.</p>
+          </article>
+        </div>
+      </section>
     </main>
 
     <dialog id="model-card" class="model-card">

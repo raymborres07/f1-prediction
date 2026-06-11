@@ -1,8 +1,13 @@
 const raceEl = document.querySelector("#race");
+const countdownEl = document.querySelector("#countdown");
+const countdownTargetEl = document.querySelector("#countdown-target");
 const metadataEl = document.querySelector("#metadata");
+const sessionsEl = document.querySelector("#sessions");
+const weatherNoteEl = document.querySelector("#weather-note");
 const metricsEl = document.querySelector("#metrics");
 const reliabilityEl = document.querySelector("#reliability");
 const diagnosticsEl = document.querySelector("#diagnostics");
+const benchmarkEl = document.querySelector("#benchmark");
 const modelCard = document.querySelector("#model-card");
 const modelCardBody = document.querySelector("#model-card-body");
 const modelCardOpen = document.querySelector("#model-card-open");
@@ -11,13 +16,18 @@ const predictionsEl = document.querySelector("#predictions");
 const statusEl = document.querySelector("#status");
 const refreshButton = document.querySelector("#refresh");
 
+let countdownTimer = null;
+
 function formatDate(value) {
-  if (!value || value === "NaT") return "Date TBD";
+  if (!value || value === "NaT") return "TBD";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Date TBD";
+  if (Number.isNaN(date.getTime())) return "TBD";
   return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   }).format(date);
 }
 
@@ -25,22 +35,69 @@ function pct(value) {
   return `${Math.round(Number(value || 0) * 100)}%`;
 }
 
-function renderRace(race) {
+function fixed(value, decimals = 1) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(decimals) : "TBD";
+}
+
+function renderRace(race, hub = {}) {
+  const details = hub.race ?? race ?? {};
+  const raceStart = new Date(details.race_date ?? race?.race_date);
+  const raceLabel = raceStart.getTime() && raceStart.getTime() < Date.now() ? "Latest Forecast" : "Next Race";
   raceEl.innerHTML = `
-    <span class="race-name">${race.event_name ?? `Round ${race.round}`}</span>
-    <span class="race-meta">${race.year} Round ${race.round} | ${race.location ?? "Location TBD"} | ${formatDate(race.race_date)}</span>
+    <div>
+      <span class="label">${raceLabel}</span>
+      <h2>${details.event_name ?? race?.event_name ?? `Round ${race?.round ?? ""}`}</h2>
+      <p>${details.country ?? race?.country ?? "Location TBD"} · ${details.location ?? race?.location ?? "Circuit TBD"}</p>
+    </div>
+    <dl class="race-facts">
+      <div><dt>Circuit</dt><dd>${details.circuit ?? details.location ?? "TBD"}</dd></div>
+      <div><dt>Round</dt><dd>${details.year ?? race?.year} · ${details.round ?? race?.round}</dd></div>
+      <div><dt>Race</dt><dd>${formatDate(details.race_date ?? race?.race_date)}</dd></div>
+    </dl>
   `;
+  startCountdown(details.race_date ?? race?.race_date);
+}
+
+function startCountdown(raceDate) {
+  if (countdownTimer) clearInterval(countdownTimer);
+  const target = new Date(raceDate);
+  countdownTargetEl.textContent = `Race start · ${formatDate(raceDate)}`;
+  if (!raceDate || Number.isNaN(target.getTime())) {
+    countdownEl.textContent = "TBD";
+    return;
+  }
+  const update = () => {
+    const ms = target.getTime() - Date.now();
+    if (ms <= 0) {
+      countdownEl.textContent = "Completed";
+      return;
+    }
+    const days = Math.floor(ms / 86400000);
+    const hours = Math.floor((ms % 86400000) / 3600000);
+    const minutes = Math.floor((ms % 3600000) / 60000);
+    countdownEl.textContent = `${days}d ${hours}h ${minutes}m`;
+  };
+  update();
+  countdownTimer = setInterval(update, 60000);
 }
 
 function renderMetadata(metadata) {
   const model = metadata.model ?? {};
   const dataset = metadata.dataset ?? {};
-  const trainedAt = model.trained_at_utc ? formatDate(model.trained_at_utc) : "not trained";
+  const simulation = metadata.simulation ?? {};
+  const data = metadata.data_included ?? {};
+  const updatedAt = simulation.built_at_utc ?? model.trained_at_utc;
+  const chips = [
+    data.practice ? "Practice included" : "Practice pending",
+    data.qualifying ? "Qualifying included" : "Qualifying not yet included",
+    data.upgrade_news ? "Upgrade news included" : "Upgrade news pending",
+  ];
   metadataEl.innerHTML = `
-    <span><strong>${metadata.prediction_mode ?? "unknown mode"}</strong></span>
-    <span>Model ${model.model_version ?? "unknown"}</span>
-    <span>Trained ${trainedAt}</span>
-    <span>Dataset ${dataset.dataset_version ?? model.dataset_version ?? "unknown"}</span>
+    <span><strong>${metadata.prediction_mode ?? "pre-race forecast"}</strong></span>
+    <span>Updated from ${updatedAt ? formatDate(updatedAt) : "unknown timestamp"}</span>
+    <span>Dataset ${dataset.dataset_version ?? model.dataset_version ?? simulation.rich_dataset ?? "unknown"}</span>
+    <span class="chip-row">${chips.map((chip) => `<i>${chip}</i>`).join("")}</span>
   `;
   renderModelCard(metadata);
 }
@@ -63,6 +120,32 @@ function renderModelCard(metadata) {
   `;
 }
 
+function renderSessions(hub) {
+  const sessions = hub.sessions ?? [];
+  weatherNoteEl.textContent = hub.weather_note ?? "Weather shown when available.";
+  if (!sessions.length) {
+    sessionsEl.innerHTML = `<span>Session schedule unavailable.</span>`;
+    return;
+  }
+  sessionsEl.innerHTML = sessions
+    .map((session) => {
+      const weather = session.weather
+        ? `${fixed(session.weather.air_temp_c, 0)}C air · ${fixed(session.weather.track_temp_c, 0)}C track · rain ${fixed(session.weather.rainfall, 1)}`
+        : "Weather TBD";
+      return `
+        <article class="session-card">
+          <div>
+            <strong>${session.name}</strong>
+            <span>${formatDate(session.starts_at)}</span>
+          </div>
+          <p>${weather}</p>
+          <small>${session.time_status ?? "scheduled"} · ${session.weather_status ?? "weather pending"}</small>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function renderPredictions(predictions) {
   if (!predictions.length) {
     predictionsEl.innerHTML = `<tr><td colspan="10">No predictions available.</td></tr>`;
@@ -72,24 +155,39 @@ function renderPredictions(predictions) {
   predictionsEl.innerHTML = predictions
     .map((row) => {
       const gridValue = row.grid_position ?? row.qualifying_position;
-      const grid = Number.isFinite(Number(gridValue)) ? `P${Number(gridValue).toFixed(0)}` : "TBD";
-      const finishBand = `${Number(row.finish_low).toFixed(1)}-${Number(row.finish_high).toFixed(1)}`;
+      const gridNumber = Number(gridValue);
+      const grid = Number.isFinite(gridNumber) && gridNumber > 0 ? `P${gridNumber.toFixed(0)}` : "TBD";
+      const finishBand = `${fixed(row.finish_low)}-${fixed(row.finish_high)}`;
+      const paceRank = Number.isFinite(Number(row.practice_adjusted_pace_rank))
+        ? `P${Number(row.practice_adjusted_pace_rank).toFixed(0)}`
+        : "TBD";
       return `
         <tr>
-          <td>${row.prediction_rank}</td>
           <td><span class="driver">${row.driver_code}</span><br><span class="muted">${row.driver_name ?? ""}</span></td>
           <td>${row.constructor_name ?? ""}</td>
           <td>${grid}</td>
           <td class="probability">${pct(row.win_probability)}</td>
           <td class="probability">${pct(row.podium_probability)}</td>
           <td class="probability">${pct(row.top10_probability)}</td>
-          <td>${Number(row.expected_finish).toFixed(1)} <span class="muted">(${finishBand})</span></td>
-          <td class="explain">${renderContributionText(row)}</td>
-          <td><span class="pill">${row.data_freshness ?? "unknown"}</span></td>
+          <td>P${fixed(row.expected_finish)}</td>
+          <td>${finishBand}</td>
+          <td>${row.recent_form ?? recentFormFromBaseline(row)}</td>
+          <td><span class="pace-rank">${paceRank}</span></td>
         </tr>
       `;
     })
     .join("");
+}
+
+function recentFormFromBaseline(row) {
+  const parts = [];
+  if (row.driver_last3_avg_finish !== null && row.driver_last3_avg_finish !== undefined) {
+    parts.push(`L3 avg P${fixed(row.driver_last3_avg_finish)}`);
+  }
+  if (row.constructor_last5_avg_finish !== null && row.constructor_last5_avg_finish !== undefined) {
+    parts.push(`Team L5 P${fixed(row.constructor_last5_avg_finish)}`);
+  }
+  return parts.join(" · ") || "Form TBD";
 }
 
 function finishBandFromDistribution(row) {
@@ -132,15 +230,6 @@ function mergeSimulationPredictions(predictions, simulation) {
     .sort((a, b) => Number(a.prediction_rank) - Number(b.prediction_rank));
 }
 
-function renderContributionText(row) {
-  const contributions = row.feature_contributions ?? [];
-  if (!contributions.length) return row.explanation ?? "";
-  const top = contributions
-    .map((item) => `${item.name}: ${Number(item.impact).toFixed(1)}`)
-    .join(", ");
-  return `${row.explanation ?? ""}<br><span class="muted">${top}</span>`;
-}
-
 function renderMetrics(metadata, report) {
   const modelMetrics = metadata.model?.metrics ?? {};
   const summary = report.summary ?? {};
@@ -165,14 +254,18 @@ function renderReliability(rows) {
     return;
   }
   reliabilityEl.innerHTML = rows
+    .slice(0, 6)
     .map((row) => {
       const predicted = Number(row.mean_predicted_probability || 0);
       const observed = Number(row.observed_podium_rate || 0);
       return `
         <div class="reliability-row">
-          <span>${pct(predicted)}</span>
-          <div class="bar"><i style="width:${Math.min(100, observed * 100)}%"></i></div>
-          <span>${pct(observed)}</span>
+          <span>${pct(predicted)} forecast</span>
+          <div class="calibration-bars">
+            <i class="forecast" style="width:${Math.min(100, predicted * 100)}%"></i>
+            <i class="observed" style="width:${Math.min(100, observed * 100)}%"></i>
+          </div>
+          <span>${pct(observed)} actual</span>
         </div>
       `;
     })
@@ -189,26 +282,64 @@ function renderDiagnostics(rows) {
     .map((row) => `
       <div class="diagnostic">
         <strong>${row.year} ${row.event_name}</strong>
-        <span>${row.diagnostic_reason ?? "weak window"} | Brier ${Number(row.podium_brier).toFixed(3)} | MAE ${Number(row.finish_mae).toFixed(2)}</span>
+        <span>${row.diagnostic_reason ?? "weak window"} · Brier ${Number(row.podium_brier).toFixed(3)} · MAE ${Number(row.finish_mae).toFixed(2)}</span>
       </div>
     `)
     .join("");
 }
 
+function renderBenchmark(benchmark) {
+  if (!benchmark?.scorecard) {
+    benchmarkEl.innerHTML = `<span>Benchmark unavailable.</span>`;
+    return;
+  }
+  const score = benchmark.scorecard;
+  const actual = benchmark.actual ?? {};
+  const forecast = benchmark.forecast ?? {};
+  benchmarkEl.innerHTML = `
+    <div>
+      <span class="label">${benchmark.event?.benchmark_status ?? "Benchmark"}</span>
+      <h3>${benchmark.event?.name ?? "Monaco Grand Prix"}: did the forecast understand the weekend?</h3>
+      <p>Actual podium: ${formatDriverCodes(actual.race_podium)}. Forecast podium: ${formatDriverCodes(forecast.predicted_podium)}.</p>
+      <p>Actual grid top 5: ${formatDriverCodes(actual.qualifying_top5)}. Forecast top 5: ${formatDriverCodes(forecast.predicted_top5)}.</p>
+    </div>
+    <div class="benchmark-score-grid">
+      <div><span>Winner hit</span><strong>${score.winner_hit ? "Yes" : "No"}</strong></div>
+      <div><span>Podium recall</span><strong>${Math.round(Number(score.podium_recall || 0) * 100)}%</strong></div>
+      <div><span>Quali top-5 overlap</span><strong>${Math.round(Number(score.qualifying_top5_overlap || 0) * 100)}%</strong></div>
+      <div><span>Hadjar podium odds</span><strong>${pct(forecast.hadjar_podium_probability)}</strong></div>
+    </div>
+    <p class="benchmark-miss">${score.main_miss}</p>
+    <ol class="replay-list">
+      ${(benchmark.replay_plan ?? []).map((item) => `<li>${item}</li>`).join("")}
+    </ol>
+  `;
+}
+
+function formatDriverCodes(codes = []) {
+  return codes.length ? codes.join(" · ") : "TBD";
+}
+
 async function loadPredictions() {
   refreshButton.disabled = true;
-  statusEl.textContent = "Loading predictions...";
+  statusEl.textContent = "Loading forecast...";
   try {
     const response = await fetch("/api/predictions/next");
     const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.detail ?? "Failed to load predictions");
     }
-    renderRace(payload.race);
+
+    const hubResponse = await fetch(`/api/race-hub/${payload.race.year}/${payload.race.round}`);
+    const hub = hubResponse.ok ? await hubResponse.json() : { race: payload.race, sessions: [] };
+    renderRace(payload.race, hub);
     renderMetadata(payload.metadata ?? {});
+    renderSessions(hub);
+
     const simulationResponse = await fetch(`/api/simulations/${payload.race.year}/${payload.race.round}`);
     const simulation = simulationResponse.ok ? await simulationResponse.json() : { predictions: [] };
     renderPredictions(mergeSimulationPredictions(payload.predictions, simulation));
+
     const [backtestResponse, calibrationResponse] = await Promise.all([
       fetch("/api/reports/backtest"),
       fetch("/api/reports/podium-calibration"),
@@ -218,15 +349,18 @@ async function loadPredictions() {
     renderMetrics(payload.metadata ?? {}, backtest);
     renderReliability(calibration.rows ?? []);
     renderDiagnostics(backtest.worst_windows ?? []);
-    statusEl.textContent = simulation.predictions?.length
-      ? `Updated ${new Date().toLocaleTimeString()} | Monte Carlo overlay active`
-      : `Updated ${new Date().toLocaleTimeString()}`;
+    const benchmarkResponse = await fetch("/api/benchmarks/monaco-2026");
+    const benchmark = benchmarkResponse.ok ? await benchmarkResponse.json() : {};
+    renderBenchmark(benchmark);
+    statusEl.textContent = `Updated ${new Date().toLocaleTimeString()} · Practice-adjusted forecast`;
   } catch (error) {
     raceEl.innerHTML = `<span>Prediction data unavailable</span>`;
     metadataEl.innerHTML = `<span>Metadata unavailable</span>`;
+    sessionsEl.innerHTML = `<span>Session schedule unavailable</span>`;
     metricsEl.innerHTML = `<span>Metrics unavailable</span>`;
     reliabilityEl.innerHTML = `<span>Calibration unavailable</span>`;
     diagnosticsEl.innerHTML = `<span>Diagnostics unavailable</span>`;
+    benchmarkEl.innerHTML = `<span>Benchmark unavailable</span>`;
     predictionsEl.innerHTML = `<tr><td colspan="10">${error.message}</td></tr>`;
     statusEl.textContent = "Run ingestion, feature generation, and training first.";
   } finally {

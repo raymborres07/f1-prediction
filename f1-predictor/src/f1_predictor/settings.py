@@ -79,6 +79,8 @@ DEMO_TRAIN_METRICS_PATH = DEMO_METRICS_DIR / "train_metrics.json"
 DEMO_SIMULATION_SUMMARY_PATH = DEMO_SIMULATIONS_DIR / "simulation_summary.parquet"
 DEMO_SIMULATION_DISTRIBUTIONS_PATH = DEMO_SIMULATIONS_DIR / "finish_distributions.parquet"
 DEMO_SIMULATION_METADATA_PATH = DEMO_SIMULATIONS_DIR / "simulation_metadata.json"
+DEMO_EVENTS_TABLE_PATH = DEMO_RICH_PROCESSED_DIR / "events.parquet"
+DEMO_PRE_RACE_FEATURES_TABLE_PATH = DEMO_RICH_PROCESSED_DIR / "pre_race_features.parquet"
 
 
 def readable_path(primary: Path, fallback: Path) -> Path:
