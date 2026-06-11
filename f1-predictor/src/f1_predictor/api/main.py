@@ -4,6 +4,9 @@ import json
 import os
 from datetime import UTC
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import urlopen
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException
@@ -42,6 +45,31 @@ WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 
 app = FastAPI(title="F1 Predictor", version="0.1.0")
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
+
+
+BARCELONA_2026 = {
+    "year": 2026,
+    "round": 7,
+    "event_name": "Barcelona-Catalunya Grand Prix",
+    "official_event_name": "Formula 1 MSC Cruises Grand Premio de Barcelona-Catalunya 2026",
+    "country": "Spain",
+    "location": "Montmelo",
+    "circuit": "Circuit de Barcelona-Catalunya",
+    "event_format": "conventional",
+    "timezone": "Europe/Madrid",
+    "latitude": 41.57,
+    "longitude": 2.261,
+    "race_date": "2026-06-14T15:00:00+02:00",
+    "qualifying_date": "2026-06-13T16:00:00+02:00",
+}
+
+BARCELONA_2026_SESSIONS = [
+    ("FP1", "2026-06-12T13:30:00+02:00"),
+    ("FP2", "2026-06-12T17:00:00+02:00"),
+    ("FP3", "2026-06-13T12:30:00+02:00"),
+    ("Qualifying", "2026-06-13T16:00:00+02:00"),
+    ("Race", "2026-06-14T15:00:00+02:00"),
+]
 
 
 def _records(df: pd.DataFrame) -> list[dict[str, object]]:
@@ -180,6 +208,73 @@ def _weather_from_features(features: pd.DataFrame) -> dict[str, object] | None:
     return weather or None
 
 
+def _fetch_open_meteo_weather(race: dict[str, object]) -> dict[str, dict[str, object]]:
+    params = {
+        "latitude": race["latitude"],
+        "longitude": race["longitude"],
+        "hourly": ",".join(
+            [
+                "temperature_2m",
+                "precipitation_probability",
+                "precipitation",
+                "wind_speed_10m",
+            ]
+        ),
+        "timezone": race["timezone"],
+        "start_date": "2026-06-12",
+        "end_date": "2026-06-14",
+    }
+    url = f"https://api.open-meteo.com/v1/forecast?{urlencode(params)}"
+    try:
+        with urlopen(url, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, OSError):
+        return {}
+    hourly = payload.get("hourly", {})
+    times = hourly.get("time", [])
+    weather_by_time = {}
+    for index, time_value in enumerate(times):
+        weather_by_time[time_value] = {
+            "air_temp_c": _hourly_value(hourly, "temperature_2m", index),
+            "rain_probability": _hourly_value(hourly, "precipitation_probability", index),
+            "rainfall": _hourly_value(hourly, "precipitation", index),
+            "wind_kph": _hourly_value(hourly, "wind_speed_10m", index),
+            "source": "Open-Meteo live forecast",
+        }
+    return weather_by_time
+
+
+def _hourly_value(hourly: dict[str, list[object]], key: str, index: int) -> object:
+    values = hourly.get(key) or []
+    if index >= len(values):
+        return None
+    value = values[index]
+    return round(float(value), 1) if value is not None else None
+
+
+def _weather_for_session(weather_by_time: dict[str, dict[str, object]], starts_at: str) -> dict[str, object] | None:
+    timestamp = pd.Timestamp(starts_at)
+    local_key = timestamp.strftime("%Y-%m-%dT%H:00")
+    return weather_by_time.get(local_key)
+
+
+def _barcelona_sessions() -> list[dict[str, object]]:
+    weather_by_time = _fetch_open_meteo_weather(BARCELONA_2026)
+    sessions = []
+    for name, starts_at in BARCELONA_2026_SESSIONS:
+        weather = _weather_for_session(weather_by_time, starts_at)
+        sessions.append(
+            {
+                "name": name,
+                "starts_at": starts_at,
+                "time_status": "confirmed local",
+                "weather": weather,
+                "weather_status": weather.get("source") if weather else "live weather unavailable",
+            }
+        )
+    return sessions
+
+
 def _synthesized_sessions(event: dict[str, object], weather: dict[str, object] | None) -> list[dict[str, object]]:
     qualifying = pd.to_datetime(event.get("qualifying_date"), errors="coerce", utc=True)
     race = pd.to_datetime(event.get("race_date"), errors="coerce", utc=True)
@@ -204,6 +299,14 @@ def _synthesized_sessions(event: dict[str, object], weather: dict[str, object] |
 
 
 def _race_hub_payload(year: int, round_number: int) -> dict[str, object]:
+    if year == BARCELONA_2026["year"] and round_number == BARCELONA_2026["round"]:
+        sessions = _barcelona_sessions()
+        return {
+            "race": BARCELONA_2026,
+            "sessions": sessions,
+            "weather_available": any(session.get("weather") for session in sessions),
+            "weather_note": "Weather is fetched live from Open-Meteo and matched to each local session hour.",
+        }
     event = _read_event_row(year, round_number)
     features = _feature_rows(year, round_number)
     weather = _weather_from_features(features)
@@ -218,6 +321,98 @@ def _race_hub_payload(year: int, round_number: int) -> dict[str, object]:
         "event_format": event.get("event_format"),
         "race_date": event.get("race_date"),
         "qualifying_date": event.get("qualifying_date"),
+    }
+
+
+def _upcoming_weekend_payload() -> dict[str, object]:
+    sessions = _barcelona_sessions()
+    return {
+        "race": BARCELONA_2026,
+        "sessions": sessions,
+        "weather_available": any(session.get("weather") for session in sessions),
+        "weather_note": "Weather is fetched live from Open-Meteo and matched to each local session hour.",
+        "context": {
+            "headline": "Antonelli enters as favorite after Monaco and current form.",
+            "conditions": "Dry, warm, low rain risk if the live weather feed remains stable.",
+            "forecast_mode": "pre-weekend, pre-qualifying",
+        },
+    }
+
+
+def _current_forecast_payload() -> dict[str, object]:
+    if _should_use_simulation_demo_homepage():
+        payload = _simulation_demo_predictions()
+    else:
+        try:
+            predictions = predict_race(BARCELONA_2026["year"], BARCELONA_2026["round"])
+            payload = {
+                "race": BARCELONA_2026,
+                "metadata": _metadata(predictions),
+                "predictions": _records(predictions),
+            }
+        except Exception:
+            payload = _simulation_demo_predictions()
+    payload["race"] = BARCELONA_2026
+    payload["metadata"]["prediction_mode"] = "pre-weekend race forecast"
+    payload["metadata"]["data_freshness"] = "practice and qualifying pending for Barcelona-Catalunya"
+    payload["metadata"]["data_included"] = {
+        "practice": False,
+        "qualifying": False,
+        "upgrade_news": True,
+        "simulation": True,
+    }
+    for row in payload.get("predictions", []):
+        row["year"] = BARCELONA_2026["year"]
+        row["round"] = BARCELONA_2026["round"]
+        row["event_name"] = BARCELONA_2026["event_name"]
+        row["grid_position"] = None
+        row["qualifying_position"] = None
+        row["has_quali_data"] = 0
+        row["data_freshness"] = "pre-weekend forecast"
+    return payload
+
+
+def _qualifying_forecast_payload() -> dict[str, object]:
+    race_payload = _current_forecast_payload()
+    predictions = race_payload.get("predictions", [])
+    ranked = sorted(
+        predictions,
+        key=lambda row: (
+            int(row.get("practice_adjusted_pace_rank") or 99),
+            float(row.get("expected_finish") or 99),
+            -float(row.get("win_probability") or 0),
+        ),
+    )
+    raw_scores = []
+    for row in ranked:
+        pace_rank = float(row.get("practice_adjusted_pace_rank") or 15)
+        race_score = float(row.get("win_probability") or 0) + float(row.get("podium_probability") or 0) * 0.4
+        raw_scores.append(max(0.02, race_score + max(0, 24 - pace_rank) / 120))
+    total = sum(raw_scores) or 1
+    records = []
+    for index, (row, score) in enumerate(zip(ranked, raw_scores, strict=False), start=1):
+        pole_probability = score / total
+        front_row_probability = min(0.95, pole_probability * 1.9 + (0.08 if index <= 4 else 0.02))
+        records.append(
+            {
+                "qualifying_rank": index,
+                "driver_code": row.get("driver_code"),
+                "driver_name": row.get("driver_name"),
+                "constructor_name": row.get("constructor_name"),
+                "pole_probability": round(pole_probability, 4),
+                "front_row_probability": round(front_row_probability, 4),
+                "practice_adjusted_pace_rank": row.get("practice_adjusted_pace_rank"),
+                "recent_form": row.get("recent_form"),
+            }
+        )
+    return {
+        "race": BARCELONA_2026,
+        "metadata": {
+            "prediction_mode": "pre-qualifying forecast",
+            "data_freshness": "practice and qualifying pending for Barcelona-Catalunya",
+            "note": "Qualifying probabilities are derived from current race forecast strength and practice-adjusted pace signals until live Barcelona practice data is available.",
+        },
+        "predictions": records[:10],
     }
     return {
         "race": race,
@@ -499,6 +694,11 @@ def race_hub(year: int, round_number: int) -> dict[str, object]:
     return _race_hub_payload(year, round_number)
 
 
+@app.get("/api/weekend/current")
+def current_weekend() -> dict[str, object]:
+    return _upcoming_weekend_payload()
+
+
 @app.get("/api/benchmarks/monaco-2026")
 def monaco_2026_benchmark() -> dict[str, object]:
     return _monaco_benchmark_payload()
@@ -506,6 +706,21 @@ def monaco_2026_benchmark() -> dict[str, object]:
 
 @app.get("/api/predictions/next")
 def predictions_next() -> dict[str, object]:
+    return _current_forecast_payload()
+
+
+@app.get("/api/predictions/qualifying/next")
+def qualifying_predictions_next() -> dict[str, object]:
+    return _qualifying_forecast_payload()
+
+
+@app.get("/api/predictions/race/next")
+def race_predictions_next() -> dict[str, object]:
+    return _current_forecast_payload()
+
+
+@app.get("/api/predictions/simulation-demo")
+def simulation_demo_predictions() -> dict[str, object]:
     if _should_use_simulation_demo_homepage():
         return _simulation_demo_predictions()
     try:

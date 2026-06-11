@@ -14,12 +14,16 @@
           <h1>F1 Predictor</h1>
         </div>
         <div class="actions">
-          <button id="model-card-open" class="secondary" type="button">Model Card</button>
+          <div class="mode-toggle" role="group" aria-label="Display mode">
+            <button id="basic-mode" class="mode-button active" type="button">Basic Mode</button>
+            <button id="geek-mode" class="mode-button" type="button">Geek Mode</button>
+          </div>
+          <button id="model-card-open" class="secondary geek-only" type="button">Model Card</button>
           <button id="refresh" type="button">Refresh</button>
         </div>
       </section>
 
-      <nav class="tabs" aria-label="Product sections">
+      <nav class="tabs geek-only" aria-label="Product sections">
         <button class="tab active" type="button">Race Hub</button>
         <button class="tab" type="button">Live Race</button>
         <button class="tab" type="button">History</button>
@@ -56,7 +60,41 @@
         </div>
       </section>
 
-      <section class="panel-grid">
+      <section class="forecast-panel basic-only">
+        <div class="section-heading table-heading">
+          <div>
+            <p class="eyebrow">Forecast</p>
+            <h2>Barcelona-Catalunya outlook</h2>
+          </div>
+          <span class="status" id="status"></span>
+        </div>
+        <div class="forecast-tabs" role="group" aria-label="Forecast type">
+          <button id="qualifying-tab" class="forecast-tab active" type="button">Qualifying prediction</button>
+          <button id="race-tab" class="forecast-tab" type="button">Race prediction</button>
+        </div>
+        <p class="basic-note" id="basic-note">Loading forecast context.</p>
+        <section class="table-wrap">
+          <table>
+            <thead id="prediction-head">
+              <tr>
+                <th>Driver</th>
+                <th>Team</th>
+                <th>Win</th>
+                <th>Podium</th>
+                <th>Top 10</th>
+                <th>Expected Finish</th>
+              </tr>
+            </thead>
+            <tbody id="predictions">
+              <tr>
+                <td colspan="6">Loading predictions</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </section>
+
+      <section class="panel-grid geek-only">
         <section class="panel">
           <h2>Backtest Metrics</h2>
           <div class="metric-grid" id="metrics">
@@ -78,15 +116,14 @@
         </section>
       </section>
 
-      <section class="section-heading table-heading">
+      <section class="section-heading table-heading geek-only">
         <div>
-          <p class="eyebrow">Forecast</p>
-          <h2>Main predictions</h2>
+          <p class="eyebrow">Geek Forecast</p>
+          <h2>Full race table</h2>
         </div>
-        <span class="status" id="status"></span>
       </section>
 
-      <section class="table-wrap">
+      <section class="table-wrap geek-only">
         <table>
           <thead>
             <tr>
@@ -102,7 +139,7 @@
               <th>Practice Pace</th>
             </tr>
           </thead>
-          <tbody id="predictions">
+          <tbody id="geek-predictions">
             <tr>
               <td colspan="10">Loading predictions</td>
             </tr>
@@ -110,7 +147,7 @@
         </table>
       </section>
 
-      <section class="history-section">
+      <section class="history-section geek-only">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Historical Context</p>

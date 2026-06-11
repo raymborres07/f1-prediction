@@ -80,8 +80,35 @@ button {
 
 .actions,
 .tabs {
+  align-items: center;
   display: flex;
   gap: 10px;
+}
+
+.mode-toggle {
+  background: #dfe6ef;
+  border-radius: 8px;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+}
+
+.mode-button,
+.forecast-tab {
+  background: transparent;
+  color: #344054;
+  min-height: 34px;
+}
+
+.mode-button.active,
+.forecast-tab.active {
+  background: #151922;
+  color: #ffffff;
+}
+
+body[data-mode="basic"] .geek-only,
+body[data-mode="geek"] .basic-only {
+  display: none;
 }
 
 .secondary,
@@ -227,9 +254,33 @@ button:disabled {
 }
 
 .schedule-panel,
+.forecast-panel,
 .history-section {
   margin-bottom: 18px;
   padding: 18px;
+}
+
+.forecast-panel {
+  background: #ffffff;
+  border: 1px solid #d8dee7;
+  border-radius: 8px;
+}
+
+.forecast-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0 10px;
+}
+
+.forecast-tab {
+  border: 1px solid #d8dee7;
+}
+
+.basic-note {
+  color: #5b6678;
+  line-height: 1.45;
+  margin-bottom: 14px;
 }
 
 .weather-note,
@@ -364,8 +415,12 @@ button:disabled {
 
 table {
   border-collapse: collapse;
-  min-width: 1160px;
+  min-width: 760px;
   width: 100%;
+}
+
+.geek-only table {
+  min-width: 1160px;
 }
 
 th,
@@ -552,6 +607,15 @@ tbody tr:hover {
 
   .actions {
     flex-direction: column;
+  }
+
+  .mode-toggle {
+    width: 100%;
+  }
+
+  .mode-button {
+    flex: 1;
+    width: auto;
   }
 
   button {
