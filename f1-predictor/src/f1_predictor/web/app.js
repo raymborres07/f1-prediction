@@ -202,6 +202,9 @@ function setForecastTab(tab) {
   qualifyingTab.classList.toggle("active", tab === "qualifying");
   raceTab.classList.toggle("active", tab === "race");
   renderForecastTables();
+  if (racePayload && qualifyingPayload && weekendPayload) {
+    renderBasicNote(racePayload.metadata ?? {}, weekendPayload);
+  }
 }
 
 function renderForecastTables() {
@@ -260,11 +263,11 @@ function renderRaceTable(predictions, target, limit = 5, geek = false) {
       return `
         <tr>
           <td>P${row.prediction_rank ?? ""}</td>
-          <td><span class="driver">${row.driver_code}</span><br><span class="muted">${row.driver_name ?? ""}</span></td>
+          <td>${driverCell(row)}</td>
           <td>${row.constructor_name ?? ""}</td>
-          <td class="probability">${pct(row.win_probability)}</td>
-          <td class="probability">${pct(row.podium_probability)}</td>
-          <td class="probability">${pct(row.top10_probability)}</td>
+          <td>${probabilityCell(row.win_probability)}</td>
+          <td>${probabilityCell(row.podium_probability)}</td>
+          <td>${probabilityCell(row.top10_probability)}</td>
           <td>P${fixed(row.expected_finish)}</td>
         </tr>
       `;
@@ -292,10 +295,10 @@ function renderQualifyingTable(predictions) {
     .map((row) => `
       <tr>
         <td>P${row.qualifying_rank}</td>
-        <td><span class="driver">${row.driver_code}</span><br><span class="muted">${row.driver_name ?? ""}</span></td>
+        <td>${driverCell(row)}</td>
         <td>${row.constructor_name ?? ""}</td>
-        <td class="probability">${pct(row.pole_probability)}</td>
-        <td class="probability">${pct(row.front_row_probability)}</td>
+        <td>${probabilityCell(row.pole_probability)}</td>
+        <td>${probabilityCell(row.front_row_probability)}</td>
         <td>${row.practice_adjusted_pace_rank ? `P${row.practice_adjusted_pace_rank}` : "TBD"}</td>
       </tr>
     `)
@@ -320,12 +323,56 @@ function renderBasicNote(metadata, weekend) {
     data.practice ? "practice included" : "practice not yet included",
     data.qualifying ? "qualifying included" : "qualifying not yet included",
   ].join(", ");
-  const note = `Antonelli is rated ahead of Russell because recent form is much stronger: Antonelli leads the 2026 standings with 156 points after Monaco, while Russell is on 88 and has gone scoreless in the last two grands prix.`;
+  const raceRussell = findDriver(racePayload?.predictions, "RUS");
+  const qualiRussell = findDriver(qualifyingPayload?.predictions, "RUS");
+  const note =
+    activeForecast === "qualifying"
+      ? `Qualifying and race forecasts are separate: Russell is P${qualiRussell?.qualifying_rank ?? "TBD"} in the quali table because this view leans on practice-adjusted pace and one-lap signals, while his race forecast is P${raceRussell?.prediction_rank ?? "TBD"}.`
+      : `Antonelli is rated ahead of Russell because recent form is much stronger: Antonelli leads the 2026 standings with 156 points after Monaco, while Russell is on 88 and has gone scoreless in the last two grands prix. Russell is P${raceRussell?.prediction_rank ?? "TBD"} in this race forecast, not the same as his qualifying rank.`;
   basicNoteEl.innerHTML = `
     <strong>${context.conditions ?? "Weather updates live when available."}</strong>
     <span>Data note: ${included}.</span>
     <span>${note}</span>
   `;
+}
+
+function findDriver(rows = [], code) {
+  return rows.find((row) => row.driver_code === code);
+}
+
+function probabilityCell(value) {
+  const percent = Math.max(0, Math.min(100, Number(value || 0) * 100));
+  return `
+    <div class="probability-cell">
+      <span>${pct(value)}</span>
+      <i style="width:${percent}%"></i>
+    </div>
+  `;
+}
+
+function driverCell(row) {
+  const color = teamColor(row.constructor_name);
+  return `
+    <span class="driver-cell" style="--team-color:${color}">
+      <span class="driver">${row.driver_code}</span>
+      <span class="muted">${row.driver_name ?? ""}</span>
+    </span>
+  `;
+}
+
+function teamColor(team = "") {
+  const normalized = team.toLowerCase();
+  if (normalized.includes("ferrari")) return "#ef1a2d";
+  if (normalized.includes("mercedes")) return "#00d2be";
+  if (normalized.includes("red bull")) return "#3671c6";
+  if (normalized.includes("mclaren")) return "#ff8000";
+  if (normalized.includes("aston")) return "#229971";
+  if (normalized.includes("williams")) return "#64c4ff";
+  if (normalized.includes("alpine")) return "#ff87bc";
+  if (normalized.includes("haas")) return "#b6babd";
+  if (normalized.includes("racing bulls") || normalized.includes("rb")) return "#6692ff";
+  if (normalized.includes("sauber") || normalized.includes("audi")) return "#52e252";
+  return "#e10600";
 }
 
 function renderMetrics(metadata, report) {

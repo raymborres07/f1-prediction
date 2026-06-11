@@ -169,12 +169,13 @@ body[data-mode="geek"] .basic-only {
   flex: 1;
   gap: 20px;
   justify-content: space-between;
-  padding: 24px;
+  padding: 30px;
 }
 
 .race-card h2 {
-  font-size: 30px;
+  font-size: 38px;
   margin-bottom: 8px;
+  max-width: 520px;
 }
 
 .race-card p,
@@ -197,7 +198,7 @@ body[data-mode="geek"] .basic-only {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
-  padding: 12px;
+  padding: 16px;
 }
 
 .race-facts dt,
@@ -309,8 +310,8 @@ body[data-mode="geek"] .basic-only {
   border: 1px solid #2a3648;
   border-radius: 8px;
   display: grid;
-  gap: 14px;
-  min-height: 232px;
+  gap: 12px;
+  min-height: 218px;
   overflow: hidden;
   padding: 16px;
   position: relative;
@@ -345,12 +346,12 @@ body[data-mode="geek"] .basic-only {
   border-radius: 8px;
   color: #ffffff;
   display: inline-flex;
-  font-size: 28px;
+  font-size: 31px;
   font-weight: 950;
-  height: 72px;
+  height: 78px;
   justify-content: center;
   letter-spacing: 0;
-  width: 92px;
+  width: 104px;
 }
 
 .weather-dry .weather-icon {
@@ -391,7 +392,7 @@ body[data-mode="geek"] .basic-only {
   background: rgba(255, 255, 255, 0.055);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  padding: 9px;
+  padding: 8px;
 }
 
 .weather-stats span {
@@ -403,7 +404,7 @@ body[data-mode="geek"] .basic-only {
 
 .weather-stats strong {
   display: block;
-  font-size: 18px;
+  font-size: 17px;
   margin-top: 2px;
 }
 
@@ -564,9 +565,31 @@ tbody tr:hover {
   font-weight: 950;
 }
 
-.probability {
+.driver-cell {
+  border-left: 4px solid var(--team-color);
+  display: grid;
+  gap: 2px;
+  padding-left: 10px;
+}
+
+.probability,
+.probability-cell span {
   color: #2dd4bf;
   font-weight: 950;
+}
+
+.probability-cell {
+  display: grid;
+  gap: 6px;
+  min-width: 86px;
+}
+
+.probability-cell i {
+  background: linear-gradient(90deg, #2dd4bf, #e10600);
+  border-radius: 999px;
+  display: block;
+  height: 5px;
+  max-width: 100%;
 }
 
 .future-grid {
