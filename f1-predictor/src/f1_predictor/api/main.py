@@ -218,6 +218,7 @@ def _fetch_open_meteo_weather(race: dict[str, object]) -> dict[str, dict[str, ob
                 "precipitation_probability",
                 "precipitation",
                 "wind_speed_10m",
+                "cloud_cover",
             ]
         ),
         "timezone": race["timezone"],
@@ -239,6 +240,7 @@ def _fetch_open_meteo_weather(race: dict[str, object]) -> dict[str, dict[str, ob
             "rain_probability": _hourly_value(hourly, "precipitation_probability", index),
             "rainfall": _hourly_value(hourly, "precipitation", index),
             "wind_kph": _hourly_value(hourly, "wind_speed_10m", index),
+            "cloud_cover": _hourly_value(hourly, "cloud_cover", index),
             "source": "Open-Meteo live forecast",
         }
     return weather_by_time
@@ -255,7 +257,25 @@ def _hourly_value(hourly: dict[str, list[object]], key: str, index: int) -> obje
 def _weather_for_session(weather_by_time: dict[str, dict[str, object]], starts_at: str) -> dict[str, object] | None:
     timestamp = pd.Timestamp(starts_at)
     local_key = timestamp.strftime("%Y-%m-%dT%H:00")
-    return weather_by_time.get(local_key)
+    weather = weather_by_time.get(local_key)
+    if not weather:
+        return None
+    window = []
+    for offset in range(3):
+        key = (timestamp + pd.Timedelta(hours=offset)).strftime("%Y-%m-%dT%H:00")
+        point = weather_by_time.get(key)
+        if point:
+            window.append(
+                {
+                    "offset_hours": offset,
+                    "rain_probability": point.get("rain_probability"),
+                    "air_temp_c": point.get("air_temp_c"),
+                    "wind_kph": point.get("wind_kph"),
+                }
+            )
+    enriched = dict(weather)
+    enriched["forecast_window"] = window
+    return enriched
 
 
 def _barcelona_sessions() -> list[dict[str, object]]:
@@ -412,7 +432,7 @@ def _qualifying_forecast_payload() -> dict[str, object]:
             "data_freshness": "practice and qualifying pending for Barcelona-Catalunya",
             "note": "Qualifying probabilities are derived from current race forecast strength and practice-adjusted pace signals until live Barcelona practice data is available.",
         },
-        "predictions": records[:10],
+        "predictions": records,
     }
     return {
         "race": race,

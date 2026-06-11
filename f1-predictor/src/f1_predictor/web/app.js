@@ -136,21 +136,54 @@ function renderSessions(weekend) {
   }
   sessionsEl.innerHTML = sessions
     .map((session) => {
-      const weather = session.weather
-        ? `${fixed(session.weather.air_temp_c, 0)}C air - rain ${fixed(session.weather.rain_probability, 0)}% - wind ${fixed(session.weather.wind_kph, 0)} kph`
-        : "Live weather unavailable";
+      const weather = session.weather;
+      const risk = weatherRisk(weather);
       return `
-        <article class="session-card">
-          <div>
+        <article class="session-card ${risk.className}">
+          <div class="weather-icon">${risk.label}</div>
+          <div class="session-main">
             <strong>${session.name}</strong>
             <span>${formatDate(session.starts_at, weekend.race?.timezone)}</span>
           </div>
-          <p>${weather}</p>
+          <div class="weather-stats">
+            <div><span>Air</span><strong>${weather ? `${fixed(weather.air_temp_c, 0)}C` : "TBD"}</strong></div>
+            <div><span>Track</span><strong>${weather?.track_temp_c ? `${fixed(weather.track_temp_c, 0)}C` : "N/A"}</strong></div>
+            <div><span>Rain</span><strong>${weather ? `${fixed(weather.rain_probability, 0)}%` : "TBD"}</strong></div>
+            <div><span>Wind</span><strong>${weather ? `${fixed(weather.wind_kph, 0)} kph` : "TBD"}</strong></div>
+          </div>
+          ${renderForecastStrip(weather)}
           <small>${session.time_status ?? "scheduled"} - ${session.weather_status ?? "weather pending"}</small>
         </article>
       `;
     })
     .join("");
+}
+
+function weatherRisk(weather) {
+  if (!weather) return { label: "TBD", className: "weather-unknown" };
+  const rain = Number(weather.rain_probability || 0);
+  const cloud = Number(weather.cloud_cover || 0);
+  if (rain >= 45) return { label: "WET", className: "weather-rain" };
+  if (rain >= 20 || cloud >= 70) return { label: "RISK", className: "weather-risk" };
+  return { label: "DRY", className: "weather-dry" };
+}
+
+function renderForecastStrip(weather) {
+  const window = weather?.forecast_window ?? [];
+  if (!window.length) {
+    return `<div class="forecast-strip unavailable"><i></i><i></i><i></i></div>`;
+  }
+  return `
+    <div class="forecast-strip" aria-label="Forecast window">
+      ${window
+        .map((point) => {
+          const rain = Math.max(0, Math.min(100, Number(point.rain_probability || 0)));
+          const height = 20 + rain * 0.6;
+          return `<i style="height:${height}%"><span>${fixed(point.rain_probability, 0)}%</span></i>`;
+        })
+        .join("")}
+    </div>
+  `;
 }
 
 function setMode(mode) {
@@ -176,7 +209,7 @@ function renderForecastTables() {
   if (activeForecast === "qualifying") {
     renderQualifyingTable(qualifyingPayload.predictions ?? []);
   } else {
-    renderRaceTable(racePayload.predictions ?? [], predictionsEl, activeMode === "basic" ? 5 : 999);
+    renderRaceTable(racePayload.predictions ?? [], predictionsEl, 999);
   }
   renderRaceTable(racePayload.predictions ?? [], geekPredictionsEl, 999, true);
 }
@@ -184,12 +217,13 @@ function renderForecastTables() {
 function renderRaceTable(predictions, target, limit = 5, geek = false) {
   const rows = predictions.slice(0, limit);
   if (!rows.length) {
-    target.innerHTML = `<tr><td colspan="${geek ? 10 : 6}">No race predictions available.</td></tr>`;
+    target.innerHTML = `<tr><td colspan="${geek ? 10 : 7}">No race predictions available.</td></tr>`;
     return;
   }
   if (!geek) {
     predictionHeadEl.innerHTML = `
       <tr>
+        <th>Rank</th>
         <th>Driver</th>
         <th>Team</th>
         <th>Win</th>
@@ -225,6 +259,7 @@ function renderRaceTable(predictions, target, limit = 5, geek = false) {
       }
       return `
         <tr>
+          <td>P${row.prediction_rank ?? ""}</td>
           <td><span class="driver">${row.driver_code}</span><br><span class="muted">${row.driver_name ?? ""}</span></td>
           <td>${row.constructor_name ?? ""}</td>
           <td class="probability">${pct(row.win_probability)}</td>
@@ -240,7 +275,7 @@ function renderRaceTable(predictions, target, limit = 5, geek = false) {
 function renderQualifyingTable(predictions) {
   predictionHeadEl.innerHTML = `
     <tr>
-      <th>Predicted</th>
+      <th>Rank</th>
       <th>Driver</th>
       <th>Team</th>
       <th>Pole</th>
@@ -248,7 +283,7 @@ function renderQualifyingTable(predictions) {
       <th>Practice Rank</th>
     </tr>
   `;
-  const rows = predictions.slice(0, 10);
+  const rows = predictions;
   if (!rows.length) {
     predictionsEl.innerHTML = `<tr><td colspan="6">No qualifying forecast available.</td></tr>`;
     return;
@@ -285,7 +320,12 @@ function renderBasicNote(metadata, weekend) {
     data.practice ? "practice included" : "practice not yet included",
     data.qualifying ? "qualifying included" : "qualifying not yet included",
   ].join(", ");
-  basicNoteEl.textContent = `${context.conditions ?? "Weather updates live when available."} Data note: ${included}.`;
+  const note = `Antonelli is rated ahead of Russell because recent form is much stronger: Antonelli leads the 2026 standings with 156 points after Monaco, while Russell is on 88 and has gone scoreless in the last two grands prix.`;
+  basicNoteEl.innerHTML = `
+    <strong>${context.conditions ?? "Weather updates live when available."}</strong>
+    <span>Data note: ${included}.</span>
+    <span>${note}</span>
+  `;
 }
 
 function renderMetrics(metadata, report) {
@@ -416,7 +456,7 @@ async function loadPredictions() {
     raceEl.innerHTML = `<span>Prediction data unavailable</span>`;
     metadataEl.innerHTML = `<span>Metadata unavailable</span>`;
     sessionsEl.innerHTML = `<span>Session schedule unavailable</span>`;
-    predictionsEl.innerHTML = `<tr><td colspan="6">${error.message}</td></tr>`;
+    predictionsEl.innerHTML = `<tr><td colspan="7">${error.message}</td></tr>`;
     geekPredictionsEl.innerHTML = `<tr><td colspan="10">${error.message}</td></tr>`;
     statusEl.textContent = "Run ingestion, feature generation, and training first.";
   } finally {

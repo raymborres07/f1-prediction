@@ -1,8 +1,8 @@
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #eef2f6;
-  color: #151922;
+  background: #080b10;
+  color: #f5f7fb;
 }
 
 * {
@@ -10,6 +10,9 @@
 }
 
 body {
+  background:
+    radial-gradient(circle at top left, rgba(225, 6, 0, 0.2), transparent 30rem),
+    linear-gradient(180deg, #111722 0%, #080b10 44rem);
   margin: 0;
 }
 
@@ -35,9 +38,9 @@ body {
 
 .eyebrow,
 .label {
-  color: #667085;
+  color: #aab5c5;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
   letter-spacing: 0;
   margin: 0 0 4px;
   text-transform: uppercase;
@@ -73,9 +76,14 @@ button {
   color: white;
   cursor: pointer;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 900;
   min-height: 42px;
   padding: 0 16px;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .actions,
@@ -86,7 +94,8 @@ button {
 }
 
 .mode-toggle {
-  background: #dfe6ef;
+  background: #151b26;
+  border: 1px solid #2b3545;
   border-radius: 8px;
   display: flex;
   gap: 4px;
@@ -96,13 +105,13 @@ button {
 .mode-button,
 .forecast-tab {
   background: transparent;
-  color: #344054;
+  color: #c8d1df;
   min-height: 34px;
 }
 
 .mode-button.active,
 .forecast-tab.active {
-  background: #151922;
+  background: #e10600;
   color: #ffffff;
 }
 
@@ -116,26 +125,21 @@ body[data-mode="geek"] .basic-only {
   background: #263244;
 }
 
-button:disabled {
-  cursor: wait;
-  opacity: 0.65;
-}
-
 .tabs {
   flex-wrap: wrap;
   margin-bottom: 18px;
 }
 
 .tab {
-  background: #ffffff;
-  border: 1px solid #d8dee7;
-  color: #344054;
+  background: #111722;
+  border: 1px solid #2b3545;
+  color: #c8d1df;
   min-height: 36px;
 }
 
 .tab.active {
-  background: #151922;
-  border-color: #151922;
+  background: #e10600;
+  border-color: #e10600;
   color: #ffffff;
 }
 
@@ -148,16 +152,18 @@ button:disabled {
 .countdown-card,
 .meta-strip,
 .schedule-panel,
+.forecast-panel,
 .panel,
 .table-wrap,
 .history-section {
-  background: #ffffff;
-  border: 1px solid #d8dee7;
+  background: rgba(17, 23, 34, 0.94);
+  border: 1px solid #2b3545;
   border-radius: 8px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
 }
 
 .race-card {
-  background: #151922;
+  background: linear-gradient(135deg, #151922 0%, #090d14 100%);
   color: white;
   display: flex;
   flex: 1;
@@ -171,9 +177,12 @@ button:disabled {
   margin-bottom: 8px;
 }
 
-.race-card p {
-  color: #cfd6e1;
-  margin-bottom: 0;
+.race-card p,
+.countdown-card span:last-child,
+.weather-note,
+.status,
+.muted {
+  color: #aab5c5;
 }
 
 .race-facts {
@@ -195,13 +204,13 @@ button:disabled {
 .card-facts dt {
   color: #9aa6b7;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
   text-transform: uppercase;
 }
 
 .race-facts dd,
 .card-facts dd {
-  font-weight: 800;
+  font-weight: 900;
   margin: 4px 0 0;
 }
 
@@ -212,19 +221,18 @@ button:disabled {
 }
 
 .countdown-card strong {
-  color: #e10600;
+  color: #ff312b;
   font-size: 32px;
   line-height: 1.1;
 }
 
 .countdown-card span:last-child {
   align-self: end;
-  color: #667085;
 }
 
 .meta-strip {
   align-items: center;
-  color: #344054;
+  color: #d7deea;
   display: flex;
   flex-wrap: wrap;
   gap: 10px 16px;
@@ -242,13 +250,13 @@ button:disabled {
 .chip-row i,
 .pill,
 .pace-rank {
-  background: #edf4ff;
+  background: rgba(225, 6, 0, 0.14);
   border-radius: 999px;
-  color: #175cd3;
+  color: #ffb3b0;
   display: inline-flex;
   font-size: 12px;
   font-style: normal;
-  font-weight: 800;
+  font-weight: 900;
   line-height: 1;
   padding: 7px 9px;
 }
@@ -260,12 +268,6 @@ button:disabled {
   padding: 18px;
 }
 
-.forecast-panel {
-  background: #ffffff;
-  border: 1px solid #d8dee7;
-  border-radius: 8px;
-}
-
 .forecast-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -274,39 +276,96 @@ button:disabled {
 }
 
 .forecast-tab {
-  border: 1px solid #d8dee7;
+  border: 1px solid #2b3545;
 }
 
 .basic-note {
-  color: #5b6678;
+  background: #0c121b;
+  border: 1px solid #263244;
+  border-left: 3px solid #e10600;
+  border-radius: 8px;
+  color: #c8d1df;
+  display: grid;
+  gap: 6px;
   line-height: 1.45;
   margin-bottom: 14px;
+  padding: 14px 16px;
 }
 
 .weather-note,
 .status {
-  color: #667085;
   font-size: 14px;
 }
 
 .session-grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  grid-template-columns: repeat(5, minmax(170px, 1fr));
   margin-top: 14px;
 }
 
 .session-card {
-  background: #f8fafc;
-  border: 1px solid #e4e9f0;
+  background: linear-gradient(180deg, #17202d 0%, #0d121b 100%);
+  border: 1px solid #2a3648;
   border-radius: 8px;
   display: grid;
-  gap: 12px;
-  min-height: 150px;
-  padding: 14px;
+  gap: 14px;
+  min-height: 232px;
+  overflow: hidden;
+  padding: 16px;
+  position: relative;
 }
 
-.session-card div {
+.session-card::before {
+  background: #6b7280;
+  content: "";
+  height: 4px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.session-card.weather-dry::before {
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+}
+
+.session-card.weather-risk::before {
+  background: linear-gradient(90deg, #f59e0b, #facc15);
+}
+
+.session-card.weather-rain::before {
+  background: linear-gradient(90deg, #38bdf8, #2563eb);
+}
+
+.weather-icon {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 28px;
+  font-weight: 950;
+  height: 72px;
+  justify-content: center;
+  letter-spacing: 0;
+  width: 92px;
+}
+
+.weather-dry .weather-icon {
+  color: #fbbf24;
+}
+
+.weather-risk .weather-icon {
+  color: #fde047;
+}
+
+.weather-rain .weather-icon {
+  color: #7dd3fc;
+}
+
+.session-main {
   display: grid;
   gap: 4px;
 }
@@ -314,12 +373,67 @@ button:disabled {
 .session-card span,
 .session-card p,
 .session-card small {
-  color: #5b6678;
+  color: #aab5c5;
 }
 
 .session-card p {
   line-height: 1.35;
   margin-bottom: 0;
+}
+
+.weather-stats {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.weather-stats div {
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 9px;
+}
+
+.weather-stats span {
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.weather-stats strong {
+  display: block;
+  font-size: 18px;
+  margin-top: 2px;
+}
+
+.forecast-strip {
+  align-items: end;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: repeat(3, 1fr);
+  height: 42px;
+  padding: 6px;
+}
+
+.forecast-strip i {
+  align-self: end;
+  background: linear-gradient(180deg, #e10600, #7f1d1d);
+  border-radius: 4px;
+  min-height: 8px;
+  position: relative;
+}
+
+.forecast-strip i span {
+  color: #f5f7fb;
+  font-size: 10px;
+  font-style: normal;
+  left: 50%;
+  position: absolute;
+  top: -15px;
+  transform: translateX(-50%);
 }
 
 .panel-grid {
@@ -333,10 +447,10 @@ button:disabled {
   padding: 16px;
 }
 
-.panel-copy {
-  color: #5b6678;
+.panel-copy,
+.future-grid p {
+  color: #aab5c5;
   line-height: 1.45;
-  margin-bottom: 12px;
 }
 
 .metric-grid,
@@ -356,7 +470,7 @@ button:disabled {
 
 .metric span,
 .diagnostic span {
-  color: #667085;
+  color: #aab5c5;
 }
 
 .metric strong {
@@ -372,7 +486,7 @@ button:disabled {
 }
 
 .calibration-bars {
-  background: #eef2f7;
+  background: #263244;
   border-radius: 999px;
   display: grid;
   gap: 2px;
@@ -387,11 +501,11 @@ button:disabled {
 }
 
 .calibration-bars .forecast {
-  background: #175cd3;
+  background: #60a5fa;
 }
 
 .calibration-bars .observed {
-  background: #12b76a;
+  background: #2dd4bf;
 }
 
 .diagnostics {
@@ -400,7 +514,7 @@ button:disabled {
 
 .diagnostic {
   align-items: flex-start;
-  border-bottom: 1px solid #edf1f5;
+  border-bottom: 1px solid #263244;
   flex-direction: column;
   padding-bottom: 10px;
 }
@@ -415,7 +529,7 @@ button:disabled {
 
 table {
   border-collapse: collapse;
-  min-width: 760px;
+  min-width: 820px;
   width: 100%;
 }
 
@@ -425,15 +539,15 @@ table {
 
 th,
 td {
-  border-bottom: 1px solid #e7ebf0;
+  border-bottom: 1px solid #263244;
   padding: 14px 16px;
   text-align: left;
   white-space: nowrap;
 }
 
 th {
-  background: #f8fafc;
-  color: #596475;
+  background: #0d121b;
+  color: #aab5c5;
   font-size: 12px;
   text-transform: uppercase;
 }
@@ -443,20 +557,16 @@ td {
 }
 
 tbody tr:hover {
-  background: #fbfcfe;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .driver {
-  font-weight: 900;
-}
-
-.muted {
-  color: #697586;
+  font-weight: 950;
 }
 
 .probability {
-  color: #087f5b;
-  font-weight: 900;
+  color: #2dd4bf;
+  font-weight: 950;
 }
 
 .future-grid {
@@ -467,7 +577,8 @@ tbody tr:hover {
 }
 
 .benchmark-card {
-  background: #151922;
+  background: #090d14;
+  border: 1px solid #263244;
   border-radius: 8px;
   color: white;
   display: grid;
@@ -493,18 +604,19 @@ tbody tr:hover {
   grid-template-columns: repeat(4, 1fr);
 }
 
-.benchmark-score-grid div {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+.benchmark-score-grid div,
+.future-grid article {
+  background: #0d121b;
+  border: 1px solid #263244;
   border-radius: 8px;
-  padding: 12px;
+  padding: 16px;
 }
 
 .benchmark-score-grid span {
   color: #a9b4c3;
   display: block;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
   text-transform: uppercase;
 }
 
@@ -519,31 +631,12 @@ tbody tr:hover {
   padding-left: 12px;
 }
 
-.replay-list {
-  color: #d7dee9;
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding-left: 20px;
-}
-
-.future-grid article {
-  background: #f8fafc;
-  border: 1px solid #e4e9f0;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.future-grid p {
-  color: #5b6678;
-  line-height: 1.45;
-  margin-bottom: 0;
-}
-
 .model-card {
-  border: 0;
+  background: #111722;
+  border: 1px solid #2b3545;
   border-radius: 8px;
-  box-shadow: 0 24px 80px rgba(18, 22, 29, 0.25);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  color: #f5f7fb;
   max-width: 640px;
   padding: 24px;
   width: min(640px, calc(100vw - 32px));
@@ -554,7 +647,7 @@ tbody tr:hover {
 }
 
 .model-card-body {
-  color: #2f3848;
+  color: #d7deea;
 }
 
 .model-card-body h3 {
