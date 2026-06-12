@@ -97,6 +97,33 @@ button:disabled {
   gap: 10px;
 }
 
+.preference-controls {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.preference-controls label {
+  color: #aab5c5;
+  display: grid;
+  font-size: 10px;
+  font-weight: 900;
+  gap: 3px;
+  text-transform: uppercase;
+}
+
+.preference-controls select {
+  background: #151b26;
+  border: 1px solid #2b3545;
+  border-radius: 6px;
+  color: #f5f7fb;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  min-height: 34px;
+  padding: 0 8px;
+}
+
 .mode-toggle {
   background: #151b26;
   border: 1px solid #2b3545;

@@ -1,5 +1,5 @@
 {
-  "exported_at_utc": "2026-06-11T04:19:10Z",
+  "exported_at_utc": "2026-06-12T00:42:51Z",
   "copied": [
     "processed/latest_predictions.parquet",
     "processed/rich/simulations/simulation_summary.parquet",
@@ -7,6 +7,10 @@
     "processed/rich/simulations/simulation_metadata.json",
     "processed/rich/events.parquet",
     "processed/rich/pre_race_features.parquet",
+    "processed/rich/lap_times.parquet",
+    "processed/rich/stint_summaries.parquet",
+    "processed/rich/tyre_usage.parquet",
+    "processed/rich/session_conditions.parquet",
     "metrics/podium_calibration.csv",
     "metrics/backtest_metrics.csv",
     "metrics/train_metrics.json"

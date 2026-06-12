@@ -22,6 +22,7 @@ from f1_predictor.settings import (
     DEMO_CALIBRATION_REPORT_PATH,
     DEMO_DATASET_METADATA_PATH,
     DEMO_EVENTS_TABLE_PATH,
+    DEMO_LAP_TIMES_TABLE_PATH,
     DEMO_SIMULATION_DISTRIBUTIONS_PATH,
     DEMO_SIMULATION_METADATA_PATH,
     DEMO_SIMULATION_SUMMARY_PATH,
@@ -30,7 +31,10 @@ from f1_predictor.settings import (
     DEMO_PRE_RACE_FEATURES_TABLE_PATH,
     DEMO_QUALIFYING_CLEAN_PATH,
     DEMO_RACES_CLEAN_PATH,
+    DEMO_SESSION_CONDITIONS_TABLE_PATH,
     DEMO_SCHEDULE_PATH,
+    DEMO_STINT_SUMMARIES_TABLE_PATH,
+    DEMO_TYRE_USAGE_TABLE_PATH,
     EVENTS_TABLE_PATH,
     MODEL_BUNDLE_PATH,
     MODEL_METADATA_PATH,
@@ -1178,7 +1182,7 @@ def _history_year_payload(year: int) -> dict[str, object]:
 
 
 def _history_lap_frame(year: int, round_number: int) -> pd.DataFrame:
-    laps = _read_parquet_if_exists(LAP_TIMES_TABLE_PATH)
+    laps = _read_parquet_if_exists(readable_path(LAP_TIMES_TABLE_PATH, DEMO_LAP_TIMES_TABLE_PATH))
     if laps.empty:
         return laps
     if "season" in laps and "year" not in laps:
@@ -1219,7 +1223,7 @@ def _history_summary_payload(year: int, round_number: int) -> dict[str, object]:
 
 
 def _history_stint_summary(year: int, round_number: int) -> list[dict[str, object]]:
-    stints = _read_parquet_if_exists(STINT_SUMMARIES_TABLE_PATH)
+    stints = _read_parquet_if_exists(readable_path(STINT_SUMMARIES_TABLE_PATH, DEMO_STINT_SUMMARIES_TABLE_PATH))
     if stints.empty:
         return []
     if "season" in stints and "year" not in stints:
@@ -1239,7 +1243,7 @@ def _history_stint_summary(year: int, round_number: int) -> list[dict[str, objec
 
 
 def _history_tyre_summary(year: int, round_number: int) -> list[dict[str, object]]:
-    tyre = _read_parquet_if_exists(TYRE_USAGE_TABLE_PATH)
+    tyre = _read_parquet_if_exists(readable_path(TYRE_USAGE_TABLE_PATH, DEMO_TYRE_USAGE_TABLE_PATH))
     if tyre.empty:
         return []
     if "season" in tyre and "year" not in tyre:
@@ -1251,7 +1255,7 @@ def _history_tyre_summary(year: int, round_number: int) -> list[dict[str, object
 
 
 def _history_weather_summary(year: int, round_number: int) -> dict[str, object]:
-    conditions = _read_parquet_if_exists(SESSION_CONDITIONS_TABLE_PATH)
+    conditions = _read_parquet_if_exists(readable_path(SESSION_CONDITIONS_TABLE_PATH, DEMO_SESSION_CONDITIONS_TABLE_PATH))
     if conditions.empty:
         return {}
     if "season" in conditions and "year" not in conditions:

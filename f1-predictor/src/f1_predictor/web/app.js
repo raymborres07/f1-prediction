@@ -23,6 +23,8 @@ const qualifyingTab = document.querySelector("#qualifying-tab");
 const raceTab = document.querySelector("#race-tab");
 const basicNoteEl = document.querySelector("#basic-note");
 const forecastStatesEl = document.querySelector("#forecast-states");
+const languageSelect = document.querySelector("#language-select");
+const unitSelect = document.querySelector("#unit-select");
 const productTabs = document.querySelectorAll("[data-section]");
 const raceHubSections = document.querySelectorAll(".race-hub-section");
 const productSections = document.querySelectorAll("[data-product-section]");
@@ -46,12 +48,67 @@ let countdownTimer = null;
 let activeMode = "basic";
 let activeForecast = "race";
 let activeSection = "race-hub";
+let activeLanguage = localStorage.getItem("f1-language") || "en";
+let activeUnits = localStorage.getItem("f1-units") || "metric";
 let racePayload = null;
 let qualifyingPayload = null;
 let weekendPayload = null;
 let statesPayload = null;
 let historyLoaded = false;
 let selectedHistoryRace = null;
+
+const I18N = {
+  en: {
+    language: "Language",
+    units: "Units",
+    basic_mode: "Basic Mode",
+    geek_mode: "Geek Mode",
+    model_card: "Model Card",
+    refresh: "Refresh",
+    race_hub: "Race Hub",
+    live_race: "Live Race",
+    history: "History",
+    driver_ratings: "Driver Ratings",
+    compatibility_lab: "Compatibility Lab",
+    what_if: "What-If Matchups",
+    sunny: "Sunny",
+    cloudy: "Cloudy",
+    dry: "Dry",
+    damp_risk: "Damp Risk",
+    wet: "Wet",
+    storm_risk: "Storm Risk",
+    risk: "Risk",
+    air: "Air",
+    track: "Track",
+    rain: "Rain",
+    wind: "Wind",
+  },
+  es: {
+    language: "Idioma",
+    units: "Unidades",
+    basic_mode: "Modo Basico",
+    geek_mode: "Modo Geek",
+    model_card: "Ficha del modelo",
+    refresh: "Actualizar",
+    race_hub: "Carrera",
+    live_race: "En vivo",
+    history: "Historia",
+    driver_ratings: "Pilotos",
+    compatibility_lab: "Laboratorio",
+    what_if: "Comparaciones",
+    sunny: "Soleado",
+    cloudy: "Nublado",
+    dry: "Seco",
+    damp_risk: "Riesgo humedo",
+    wet: "Mojado",
+    storm_risk: "Riesgo tormenta",
+    risk: "Riesgo",
+    air: "Aire",
+    track: "Pista",
+    rain: "Lluvia",
+    wind: "Viento",
+  },
+};
 
 function formatDate(value, timeZone) {
   if (!value || value === "NaT") return "TBD";
@@ -65,7 +122,56 @@ function formatDate(value, timeZone) {
     minute: "2-digit",
   };
   if (timeZone) options.timeZone = timeZone;
-  return new Intl.DateTimeFormat(undefined, options).format(date);
+  return new Intl.DateTimeFormat(activeLanguage === "es" ? "es" : undefined, options).format(date);
+}
+
+function t(key) {
+  return I18N[activeLanguage]?.[key] ?? I18N.en[key] ?? key;
+}
+
+function translateStaticText() {
+  document.querySelectorAll("[data-i18n]").forEach((node) => {
+    node.textContent = t(node.dataset.i18n);
+  });
+}
+
+function temp(value, decimals = 0) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "TBD";
+  if (activeUnits === "imperial") return `${((number * 9) / 5 + 32).toFixed(decimals)}F`;
+  return `${number.toFixed(decimals)}C`;
+}
+
+function speed(value, decimals = 0) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "TBD";
+  if (activeUnits === "imperial") return `${(number * 0.621371).toFixed(decimals)} mph`;
+  return `${number.toFixed(decimals)} kph`;
+}
+
+function localizeCondition(label) {
+  const key = String(label || "")
+    .toLowerCase()
+    .replace(/[^a-z]+/g, "_")
+    .replace(/^_|_$/g, "");
+  return t(key) || label || "TBD";
+}
+
+function applyPreferences() {
+  languageSelect.value = activeLanguage;
+  unitSelect.value = activeUnits;
+  translateStaticText();
+  if (weekendPayload) {
+    renderRace(weekendPayload.race);
+    renderSessions(weekendPayload);
+  }
+  if (racePayload && weekendPayload) {
+    renderMetadata(racePayload.metadata ?? {}, weekendPayload);
+    renderBasicNote(racePayload.metadata ?? {}, weekendPayload);
+  }
+  if (selectedHistoryRace) {
+    loadHistoryRace(selectedHistoryRace.year, selectedHistoryRace.round);
+  }
 }
 
 function pct(value) {
@@ -169,17 +275,17 @@ function renderSessions(weekend) {
           <div class="session-main">
             <strong>${session.name}</strong>
             <span>${formatDate(session.starts_at, weekend.race?.timezone)}</span>
-            <p>${condition.label}</p>
+            <p>${localizeCondition(condition.label)}</p>
           </div>
           <div class="weather-stats">
-            <div><span>Air</span><strong>${weather ? `${fixed(weather.air_temp_c, 0)}C` : "TBD"}</strong></div>
-            <div><span>Track</span><strong>${weather?.track_temp_c ? `${fixed(weather.track_temp_c, 0)}C` : "N/A"}</strong></div>
-            <div><span>Rain</span><strong>${weather ? `${fixed(weather.rain_probability, 0)}%` : "TBD"}</strong></div>
-            <div><span>Wind</span><strong>${weather ? `${fixed(weather.wind_kph, 0)} kph` : "TBD"}</strong></div>
+            <div><span>${t("air")}</span><strong>${weather ? temp(weather.air_temp_c, 0) : "TBD"}</strong></div>
+            <div><span>${t("track")}</span><strong>${weather?.track_temp_c ? temp(weather.track_temp_c, 0) : "N/A"}</strong></div>
+            <div><span>${t("rain")}</span><strong>${weather ? `${fixed(weather.rain_probability, 0)}%` : "TBD"}</strong></div>
+            <div><span>${t("wind")}</span><strong>${weather ? speed(weather.wind_kph, 0) : "TBD"}</strong></div>
           </div>
           ${renderForecastStrip(weather)}
           <small>
-            ${session.time_status ?? "scheduled"} - ${condition.supportingText} - ${weather?.weather_condition_reason ?? session.weather_status ?? "weather pending"}
+            ${session.time_status ?? "scheduled"} - ${condition.supportingText} - ${weatherReason(weather, session.weather_status)}
           </small>
         </article>
       `;
@@ -187,7 +293,7 @@ function renderSessions(weekend) {
     .join("");
 }
 
-function weatherCondition(weather) {
+function legacyWeatherCondition(weather) {
   if (!weather) return { label: "TBD", icon: "–", className: "weather-unknown", supportingText: "Risk TBD" };
   if (weather.weather_condition && weather.weather_icon && weather.weather_class) {
     const score = Number(weather.weather_risk_score ?? weather.risk_score);
@@ -204,6 +310,31 @@ function weatherCondition(weather) {
   if (rain >= 20) return { label: "Damp Risk", icon: "🌦️", className: "weather-damp", supportingText: "Risk medium" };
   if (cloud >= 70) return { label: "Cloudy", icon: "☁️", className: "weather-cloudy", supportingText: "Risk low" };
   return { label: "Dry", icon: "🌤️", className: "weather-dry", supportingText: "Risk low" };
+}
+
+function weatherCondition(weather) {
+  if (!weather) return { label: "TBD", icon: "-", className: "weather-unknown", supportingText: `${t("risk")} TBD` };
+  if (weather.weather_condition && weather.weather_icon && weather.weather_class) {
+    const score = Number(weather.weather_risk_score ?? weather.risk_score);
+    return {
+      label: weather.weather_condition,
+      icon: weather.weather_icon,
+      className: weather.weather_class,
+      supportingText: Number.isFinite(score) ? `${t("risk")} ${score}/100` : `${t("risk")} TBD`,
+    };
+  }
+  const rain = Number(weather.rain_probability || 0);
+  const cloud = Number(weather.cloud_cover || 0);
+  if (rain >= 45) return { label: "Wet", icon: "\u{1F327}\uFE0F", className: "weather-wet", supportingText: `${t("risk")} high` };
+  if (rain >= 20) return { label: "Damp Risk", icon: "\u{1F326}\uFE0F", className: "weather-damp", supportingText: `${t("risk")} medium` };
+  if (cloud >= 70) return { label: "Cloudy", icon: "\u2601\uFE0F", className: "weather-cloudy", supportingText: `${t("risk")} low` };
+  return { label: "Dry", icon: "\u{1F324}\uFE0F", className: "weather-dry", supportingText: `${t("risk")} low` };
+}
+
+function weatherReason(weather, fallback) {
+  if (!weather) return fallback ?? "weather pending";
+  const rain = weather.rain_probability !== null && weather.rain_probability !== undefined ? `${fixed(weather.rain_probability, 0)}%` : "TBD";
+  return `${localizeCondition(weather.weather_condition)}: ${t("rain")} ${rain}, ${t("wind")} ${speed(weather.wind_kph, 0)}`;
 }
 
 function renderForecastStrip(weather) {
@@ -658,10 +789,10 @@ function renderHistoryRace(payload) {
     <div><span>Fastest lap</span><strong>${fastest[0]?.driver_code ?? "TBD"}</strong></div>
   `;
   historyRaceContextEl.innerHTML = `
-    <div><span>Avg air</span><strong>${weather.average_air_temp_c ?? "TBD"}C</strong></div>
-    <div><span>Avg track</span><strong>${weather.average_track_temp_c ?? "TBD"}C</strong></div>
+    <div><span>Avg air</span><strong>${temp(weather.average_air_temp_c, 1)}</strong></div>
+    <div><span>Avg track</span><strong>${temp(weather.average_track_temp_c, 1)}</strong></div>
     <div><span>Rain samples</span><strong>${weather.rain_samples ?? 0}</strong></div>
-    <div><span>Wind</span><strong>${weather.average_wind_kph ?? "TBD"} kph</strong></div>
+    <div><span>Wind</span><strong>${speed(weather.average_wind_kph, 1)}</strong></div>
   `;
   renderHistoryGeekContext(payload);
   historyResultsEl.innerHTML = (payload.race_results ?? [])
@@ -824,8 +955,19 @@ historyRacesEl.addEventListener("click", (event) => {
 });
 historyDriverEl.addEventListener("change", loadHistoryDriver);
 historyTeamEl.addEventListener("change", loadHistoryTeam);
+languageSelect.addEventListener("change", () => {
+  activeLanguage = languageSelect.value;
+  localStorage.setItem("f1-language", activeLanguage);
+  applyPreferences();
+});
+unitSelect.addEventListener("change", () => {
+  activeUnits = unitSelect.value;
+  localStorage.setItem("f1-units", activeUnits);
+  applyPreferences();
+});
 modelCardOpen.addEventListener("click", () => modelCard.showModal());
 modelCardClose.addEventListener("click", () => modelCard.close());
 setMode("basic");
 setProductSection("race-hub");
+applyPreferences();
 loadPredictions();
