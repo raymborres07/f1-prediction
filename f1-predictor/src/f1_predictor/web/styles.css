@@ -273,6 +273,65 @@ body[data-mode="geek"] .basic-only {
   padding: 14px 16px;
 }
 
+.synthesis-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.synthesis-grid article {
+  background: linear-gradient(180deg, #151b26, #0d121b);
+  border: 1px solid #263244;
+  border-left: 4px solid #e10600;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.synthesis-grid span {
+  color: #aab5c5;
+  font-size: 11px;
+  font-weight: 1000;
+  text-transform: uppercase;
+}
+
+.synthesis-grid strong {
+  font-size: 18px;
+}
+
+.synthesis-grid p {
+  color: #aab5c5;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.synthesis-grid button {
+  justify-self: start;
+  min-height: 34px;
+  padding: 8px 10px;
+}
+
+.coverage-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.coverage-badges i {
+  background: rgba(225, 6, 0, 0.16);
+  border: 1px solid rgba(225, 6, 0, 0.38);
+  border-radius: 999px;
+  color: #f5f7fb;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  padding: 4px 8px;
+}
+
 .chip-row {
   display: inline-flex;
   flex-wrap: wrap;
@@ -1187,6 +1246,29 @@ tbody tr:hover {
   font-weight: 900;
 }
 
+.explain-card {
+  background: #0d121b;
+  border: 1px solid #263244;
+  border-left: 4px solid #2dd4bf;
+  border-radius: 8px;
+  color: #d7dee9;
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  padding: 14px;
+}
+
+.explain-card strong {
+  color: #f5f7fb;
+  font-size: 16px;
+}
+
+.explain-card p {
+  color: #aab5c5;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
 .matchup-bar {
   align-items: center;
   display: grid;
@@ -1359,6 +1441,7 @@ tbody tr:hover {
   .profile-stat-grid,
   .rating-grid,
   .compatibility-grid,
+  .synthesis-grid,
   .trend-grid,
   .future-grid,
   .session-grid {

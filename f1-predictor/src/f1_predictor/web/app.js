@@ -2,6 +2,7 @@ const raceEl = document.querySelector("#race");
 const countdownEl = document.querySelector("#countdown");
 const countdownTargetEl = document.querySelector("#countdown-target");
 const metadataEl = document.querySelector("#metadata");
+const synthesisCardsEl = document.querySelector("#synthesis-cards");
 const sessionsEl = document.querySelector("#sessions");
 const weatherNoteEl = document.querySelector("#weather-note");
 const metricsEl = document.querySelector("#metrics");
@@ -90,6 +91,7 @@ const compatibilityComponentsEl = document.querySelector("#compatibility-compone
 const compatibilityContextEl = document.querySelector("#compatibility-context");
 const compatibilityLinksEl = document.querySelector("#compatibility-links");
 const compatibilityNotesEl = document.querySelector("#compatibility-notes");
+const compatibilityExplainEl = document.querySelector("#compatibility-explain");
 const whatIfDriverAEl = document.querySelector("#whatif-driver-a");
 const whatIfDriverBEl = document.querySelector("#whatif-driver-b");
 const whatIfCircuitEl = document.querySelector("#whatif-circuit");
@@ -102,6 +104,7 @@ const whatIfDimensionsEl = document.querySelector("#whatif-dimensions");
 const whatIfContextEl = document.querySelector("#whatif-context");
 const whatIfLinksEl = document.querySelector("#whatif-links");
 const whatIfNotesEl = document.querySelector("#whatif-notes");
+const whatIfExplainEl = document.querySelector("#whatif-explain");
 
 let countdownTimer = null;
 let activeMode = "basic";
@@ -201,6 +204,49 @@ function translateStaticText() {
   document.querySelectorAll("[data-i18n]").forEach((node) => {
     node.textContent = t(node.dataset.i18n);
   });
+}
+
+function setUrlState(params = {}, replace = true) {
+  const url = new URL(window.location.href);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === null || value === undefined || value === "") {
+      url.searchParams.delete(key);
+    } else {
+      url.searchParams.set(key, value);
+    }
+  });
+  window.history[replace ? "replaceState" : "pushState"]({}, "", url);
+}
+
+function initialParams() {
+  return new URLSearchParams(window.location.search);
+}
+
+async function copyShareUrl(extraParams = {}) {
+  const url = new URL(window.location.href);
+  Object.entries(extraParams).forEach(([key, value]) => url.searchParams.set(key, value));
+  if (navigator.clipboard?.writeText) {
+    try {
+      await Promise.race([
+        navigator.clipboard.writeText(url.toString()),
+        new Promise((resolve) => setTimeout(resolve, 750)),
+      ]);
+    } catch {
+      // Clipboard permission can be unavailable in embedded browsers; the URL state is still updated.
+    }
+  }
+  return url.toString();
+}
+
+function coverageBadges(metadata = {}) {
+  const coverage = metadata.coverage ?? {};
+  return `
+    <span class="coverage-badges">
+      <i>Broad results</i>
+      <i>${coverage.rich_session_detail ? "Rich modern data" : "Rich data where available"}</i>
+      <i>${coverage.deep_modern_detail ? "OpenF1 2023+" : "Era-limited detail"}</i>
+    </span>
+  `;
 }
 
 function temp(value, decimals = 0) {
@@ -318,6 +364,40 @@ function renderMetadata(metadata, weekend) {
     <span class="chip-row">${chips.map((chip) => `<i>${chip}</i>`).join("")}</span>
   `;
   renderModelCard(metadata);
+}
+
+function renderSynthesisCards() {
+  const topRace = racePayload?.predictions?.[0] ?? {};
+  const topQuali = qualifyingPayload?.predictions?.[0] ?? {};
+  const race = weekendPayload?.race ?? {};
+  const topDriver = topRace.driver_code ?? topQuali.driver_code ?? "ANT";
+  const topTeam = topRace.constructor_name ?? "Mercedes";
+  synthesisCardsEl.innerHTML = `
+    <article>
+      <span>Driver Card</span>
+      <strong>${topDriver} profile</strong>
+      <p>Form, splits, teammate context, and evidence ratings.</p>
+      <button type="button" data-open-driver="${topDriver}">Open driver</button>
+    </article>
+    <article>
+      <span>Circuit Context</span>
+      <strong>${race.circuit ?? race.location ?? "Current circuit"}</strong>
+      <p>Qualifying importance, overtaking, tyre and race-history patterns.</p>
+      <button type="button" data-open-circuit="${circuitKey(race)}">Open circuit</button>
+    </article>
+    <article>
+      <span>Team Fit</span>
+      <strong>${topDriver} -> ${topTeam}</strong>
+      <p>Evidence-based compatibility with confidence and TBD handling.</p>
+      <button type="button" data-open-compat-driver="${topDriver}" data-open-compat-team="${topTeam}">Open fit</button>
+    </article>
+    <article>
+      <span>What-if</span>
+      <strong>${topDriver} vs VER</strong>
+      <p>Simulated matchup at the current circuit with uncertainty notes.</p>
+      <button type="button" data-open-whatif-a="${topDriver}" data-open-whatif-b="VER">Run matchup</button>
+    </article>
+  `;
 }
 
 function renderModelCard(metadata) {
@@ -812,7 +892,7 @@ async function loadHistory() {
 
 function renderHistoryCoverage(metadata) {
   const coverage = metadata.coverage ?? {};
-  historyCoverageEl.textContent = `${coverage.broad_results ?? "Broad results archive"}; ${coverage.rich_session_detail ?? "rich session detail when available"}.`;
+  historyCoverageEl.innerHTML = `${coverage.broad_results ?? "Broad results archive"}; ${coverage.rich_session_detail ?? "rich session detail when available"}. ${coverageBadges(metadata)}`;
 }
 
 function renderSeasonOptions(seasons) {
@@ -1138,7 +1218,7 @@ function renderDriverProfile(payload) {
   const form = payload.recent_form ?? {};
   const metadata = payload.metadata ?? {};
   const coverage = metadata.coverage ?? {};
-  profileCoverageEl.textContent = `${coverage.broad_results ?? "Broad result history"}; ${coverage.rich_session_detail ?? "rich modern detail when available"}.`;
+  profileCoverageEl.innerHTML = `${coverage.broad_results ?? "Broad result history"}; ${coverage.rich_session_detail ?? "rich modern detail when available"}. ${coverageBadges(metadata)}`;
   profileHeroEl.innerHTML = `
     <div>
       <span class="profile-code">${code}</span>
@@ -1264,7 +1344,7 @@ function renderCircuitProfile(payload) {
   const metadata = payload.metadata ?? {};
   const coverage = metadata.coverage ?? {};
   circuitKeyEl.value = identity.name ?? payload.circuit_key ?? circuitKeyEl.value;
-  circuitCoverageEl.textContent = `${coverage.broad_results ?? "Broad result history"}; ${coverage.rich_session_detail ?? "rich modern timing detail when generated"}.`;
+  circuitCoverageEl.innerHTML = `${coverage.broad_results ?? "Broad result history"}; ${coverage.rich_session_detail ?? "rich modern timing detail when generated"}. ${coverageBadges(metadata)}`;
   circuitHeroEl.innerHTML = `
     <div>
       <span class="profile-code">${identity.track_type ?? "circuit"}</span>
@@ -1350,7 +1430,7 @@ function renderTeamProfile(payload) {
   const metadata = payload.metadata ?? {};
   const coverage = metadata.coverage ?? {};
   teamProfileKeyEl.value = team;
-  teamProfileCoverageEl.textContent = `${coverage.broad_results ?? "Broad result history"}; ${coverage.rich_session_detail ?? "rich modern detail when available"}.`;
+  teamProfileCoverageEl.innerHTML = `${coverage.broad_results ?? "Broad result history"}; ${coverage.rich_session_detail ?? "rich modern detail when available"}. ${coverageBadges(metadata)}`;
   teamProfileHeroEl.innerHTML = `
     <div>
       <span class="profile-code">constructor</span>
@@ -1443,6 +1523,7 @@ async function loadCompatibility(driver = null, team = null) {
   const teamName = team || compatTeamEl.value || teamProfileKeyEl.value || "Mercedes";
   compatDriverEl.value = driverCode;
   compatTeamEl.value = teamName;
+  setUrlState({ section: "lab", driver: driverCode, team: teamName });
   compatibilityHeroEl.textContent = "Loading compatibility evidence...";
   compatibilityComponentsEl.textContent = "Loading fit dimensions...";
   const response = await fetch(`/api/lab/compatibility/driver-team?driver_code=${encodeURIComponent(driverCode)}&team_name=${encodeURIComponent(teamName)}`);
@@ -1457,7 +1538,7 @@ function renderCompatibility(payload) {
   const confidence = payload.confidence ?? "low";
   const metadata = payload.metadata ?? {};
   const coverage = metadata.coverage ?? {};
-  compatCoverageEl.textContent = `${coverage.broad_results ?? "Broad result history"}; ${coverage.rich_session_detail ?? "rich modern detail when available"}.`;
+  compatCoverageEl.innerHTML = `${coverage.broad_results ?? "Broad result history"}; ${coverage.rich_session_detail ?? "rich modern detail when available"}. ${coverageBadges(metadata)}`;
   compatibilityHeroEl.innerHTML = `
     <div>
       <span class="profile-code">driver-to-team fit</span>
@@ -1517,7 +1598,9 @@ function renderCompatibilityNotes(payload) {
   compatibilityLinksEl.innerHTML = `
     <button type="button" data-open-driver="${payload.driver?.code ?? "ANT"}">Driver profile</button>
     <button type="button" data-open-team="${payload.team?.name ?? "Mercedes"}">Team profile</button>
+    <button type="button" data-share-compatibility>Copy share link</button>
   `;
+  compatibilityExplainEl.innerHTML = explanationList("Why this fit?", payload.components ?? [], "score");
   compatibilityNotesEl.innerHTML = (payload.notes ?? []).map((note) => `
     <div>
       <span>Lab note</span>
@@ -1533,6 +1616,7 @@ async function loadWhatIfMatchup() {
   const circuit = whatIfCircuitEl.value || "current";
   const session = whatIfSessionEl.value || "race";
   const condition = whatIfConditionEl.value || "dry";
+  setUrlState({ section: "what-if", a: driverA, b: driverB, circuit, session, condition });
   whatIfHeroEl.textContent = "Running simulated matchup...";
   whatIfDimensionsEl.textContent = "Loading matchup evidence...";
   const response = await fetch(
@@ -1550,7 +1634,7 @@ function renderWhatIfMatchup(payload) {
   const metadata = payload.metadata ?? {};
   const coverage = metadata.coverage ?? {};
   const edge = payload.matchup_edge;
-  whatIfCoverageEl.textContent = `${coverage.broad_results ?? "Broad result history"}; ${coverage.rich_session_detail ?? "rich modern detail when available"}.`;
+  whatIfCoverageEl.innerHTML = `${coverage.broad_results ?? "Broad result history"}; ${coverage.rich_session_detail ?? "rich modern detail when available"}. ${coverageBadges(metadata)}`;
   whatIfHeroEl.innerHTML = `
     <div>
       <span class="profile-code">simulated matchup</span>
@@ -1615,13 +1699,31 @@ function renderWhatIfNotes(payload) {
     <button type="button" data-open-driver="${matchup.driver_a?.code ?? "ANT"}">${matchup.driver_a?.code ?? "A"} profile</button>
     <button type="button" data-open-driver="${matchup.driver_b?.code ?? "VER"}">${matchup.driver_b?.code ?? "B"} profile</button>
     <button type="button" data-open-circuit="${matchup.circuit?.name ?? "current"}">Circuit profile</button>
+    <button type="button" data-share-whatif>Copy share link</button>
   `;
+  whatIfExplainEl.innerHTML = explanationList("Why this edge?", payload.dimensions ?? [], "edge");
   whatIfNotesEl.innerHTML = (payload.uncertainty_notes ?? []).map((note) => `
     <div>
       <span>Simulator note</span>
       <strong>${note}</strong>
     </div>
   `).join("");
+}
+
+function explanationList(title, rows, valueKey) {
+  const top = rows
+    .filter((row) => row[valueKey] !== null && row[valueKey] !== undefined && Number.isFinite(Number(row[valueKey])))
+    .sort((a, b) => Math.abs(Number(b[valueKey])) - Math.abs(Number(a[valueKey])))
+    .slice(0, 3);
+  if (!top.length) {
+    return `<strong>${title}</strong><p>Evidence is too thin to identify top contributors.</p>`;
+  }
+  return `
+    <strong>${title}</strong>
+    <p>${top
+      .map((row) => `${row.label}: ${Number(row[valueKey]).toFixed(1)}`)
+      .join(" | ")}</p>
+  `;
 }
 
 function renderDriverRatings(ratings) {
@@ -1708,6 +1810,7 @@ async function loadPredictions() {
     renderSessions(weekendPayload);
     renderBasicNote(racePayload.metadata ?? {}, weekendPayload);
     renderForecastStates(statesPayload);
+    renderSynthesisCards();
     renderForecastTables();
     if (activeMode === "geek") await loadGeekReports();
     statusEl.textContent = `Updated ${new Date().toLocaleTimeString()} - ${racePayload.metadata?.prediction_mode ?? "pre-weekend forecast"}`;
@@ -1782,6 +1885,25 @@ document.addEventListener("click", (event) => {
   setProductSection("what-if");
   loadWhatIfMatchup();
 });
+document.addEventListener("click", async (event) => {
+  const compatibilityShare = event.target.closest("[data-share-compatibility]");
+  const whatIfShare = event.target.closest("[data-share-whatif]");
+  if (compatibilityShare) {
+    await copyShareUrl({ section: "lab", driver: compatDriverEl.value, team: compatTeamEl.value });
+    compatibilityShare.textContent = "Copied";
+  }
+  if (whatIfShare) {
+    await copyShareUrl({
+      section: "what-if",
+      a: whatIfDriverAEl.value,
+      b: whatIfDriverBEl.value,
+      circuit: whatIfCircuitEl.value,
+      session: whatIfSessionEl.value,
+      condition: whatIfConditionEl.value,
+    });
+    whatIfShare.textContent = "Copied";
+  }
+});
 profileCompareShortcutsEl.addEventListener("click", (event) => {
   const button = event.target.closest("[data-compare-profile]");
   if (!button) return;
@@ -1812,6 +1934,20 @@ unitSelect.addEventListener("change", () => {
 modelCardOpen.addEventListener("click", () => modelCard.showModal());
 modelCardClose.addEventListener("click", () => modelCard.close());
 setMode("basic");
-setProductSection("race-hub");
+const params = initialParams();
+if (params.get("section") === "lab") {
+  compatDriverEl.value = params.get("driver") || compatDriverEl.value;
+  compatTeamEl.value = params.get("team") || compatTeamEl.value;
+  setProductSection("lab");
+} else if (params.get("section") === "what-if") {
+  whatIfDriverAEl.value = params.get("a") || whatIfDriverAEl.value;
+  whatIfDriverBEl.value = params.get("b") || whatIfDriverBEl.value;
+  whatIfCircuitEl.value = params.get("circuit") || whatIfCircuitEl.value;
+  whatIfSessionEl.value = params.get("session") || whatIfSessionEl.value;
+  whatIfConditionEl.value = params.get("condition") || whatIfConditionEl.value;
+  setProductSection("what-if");
+} else {
+  setProductSection("race-hub");
+}
 applyPreferences();
 loadPredictions();
