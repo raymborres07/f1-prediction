@@ -869,6 +869,45 @@ tbody tr:hover {
   min-width: 720px;
 }
 
+.compare-layout {
+  grid-template-columns: 1fr 1fr;
+}
+
+.rating-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rating-card {
+  background: #0d121b;
+  border: 1px solid #263244;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.rating-row {
+  display: grid;
+  gap: 5px;
+  grid-template-columns: 1fr auto;
+}
+
+.rating-row span {
+  color: #aab5c5;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.rating-row i {
+  background: linear-gradient(90deg, #2dd4bf, #e10600);
+  border-radius: 999px;
+  display: block;
+  grid-column: 1 / -1;
+  height: 6px;
+}
+
 .benchmark-card {
   background: #090d14;
   border: 1px solid #263244;

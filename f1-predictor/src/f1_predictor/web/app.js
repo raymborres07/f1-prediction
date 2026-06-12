@@ -43,6 +43,11 @@ const historyTeamSummaryEl = document.querySelector("#history-team-summary");
 const historyGeekContextEl = document.querySelector("#history-geek-context");
 const historyLapsEl = document.querySelector("#history-laps");
 const historyLapStatusEl = document.querySelector("#history-lap-status");
+const compareDriverAEl = document.querySelector("#compare-driver-a");
+const compareDriverBEl = document.querySelector("#compare-driver-b");
+const compareDriversButton = document.querySelector("#compare-drivers");
+const driverCompareSummaryEl = document.querySelector("#driver-compare-summary");
+const driverRatingSummaryEl = document.querySelector("#driver-rating-summary");
 
 let countdownTimer = null;
 let activeMode = "basic";
@@ -707,7 +712,7 @@ async function loadHistory() {
     renderSeasonCards(seasons.season_cards ?? []);
     const selectedYear = Number(historySeasonEl.value || seasons.seasons?.[0]?.year || 2026);
     await loadHistoryYear(selectedYear);
-    await Promise.all([loadHistoryDriver(), loadHistoryTeam()]);
+    await Promise.all([loadHistoryDriver(), loadHistoryTeam(), loadDriverCompare()]);
   } catch (error) {
     historyRacesEl.textContent = `History unavailable: ${error.message}`;
   }
@@ -812,10 +817,10 @@ function renderHistoryGeekContext(payload) {
   const tyres = payload.tyre_summary ?? [];
   const stints = payload.stint_summary ?? [];
   const tyreText = tyres.length
-    ? tyres.slice(0, 4).map((row) => `${row.compound ?? "?"}: ${fixed(row.total_laps, 0)} laps`).join(" · ")
+    ? tyres.slice(0, 4).map((row) => `${row.compound ?? "?"}: ${fixed(row.total_laps, 0)} laps`).join(" | ")
     : "Tyre usage unavailable";
   const stintText = stints.length
-    ? stints.slice(0, 4).map((row) => `${row.driver_code}: ${fixed(row.stints, 0)} stints`).join(" · ")
+    ? stints.slice(0, 4).map((row) => `${row.driver_code}: ${fixed(row.stints, 0)} stints`).join(" | ")
     : "Stint summary unavailable";
   historyGeekContextEl.innerHTML = `
     <div><span>Tyre usage</span><strong>${tyreText}</strong></div>
@@ -875,16 +880,90 @@ function renderHistoryEntitySummary(target, summary, title, seasons = [], compar
     ["Points", summary.points ?? "TBD"],
   ];
   const seasonText = seasons.length
-    ? seasons.slice(0, 3).map((row) => `${row.year}: ${row.wins}W, ${row.podiums}P, ${fixed(row.average_finish, 1)} avg`).join(" · ")
+    ? seasons.slice(0, 3).map((row) => `${row.year}: ${row.wins}W, ${row.podiums}P, ${fixed(row.average_finish, 1)} avg`).join(" | ")
     : "Season trends pending";
   const comparisonText = comparison.length
-    ? comparison.slice(0, 3).map((row) => `${row.teammate ?? row.drivers?.join("/") ?? row.year}: ${row.head_to_head_wins ?? row.drivers?.join(", ") ?? ""}`).join(" · ")
+    ? comparison.slice(0, 3).map((row) => `${row.teammate ?? row.drivers?.join("/") ?? row.year}: ${row.head_to_head_wins ?? row.drivers?.join(", ") ?? ""}`).join(" | ")
     : "Comparison detail pending";
   target.innerHTML = `
     ${cards.map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("")}
     <div class="wide"><span>Recent seasons</span><strong>${seasonText}</strong></div>
     <div class="wide"><span>Head-to-head / lineup</span><strong>${comparisonText}</strong></div>
   `;
+}
+
+async function loadDriverCompare() {
+  const driverA = (compareDriverAEl.value || "ANT").trim().toUpperCase();
+  const driverB = (compareDriverBEl.value || "RUS").trim().toUpperCase();
+  driverCompareSummaryEl.textContent = "Loading comparison...";
+  driverRatingSummaryEl.textContent = "Loading ratings...";
+  const response = await fetch(`/api/history/compare/drivers/${encodeURIComponent(driverA)}/${encodeURIComponent(driverB)}`);
+  const payload = await response.json();
+  renderDriverCompare(payload);
+}
+
+function renderDriverCompare(payload) {
+  const drivers = payload.drivers ?? [];
+  const comparison = payload.comparison ?? [];
+  const driverA = drivers[0]?.driver_code ?? "A";
+  const driverB = drivers[1]?.driver_code ?? "B";
+  const important = comparison.filter((row) =>
+    ["wins", "podiums", "podium_rate", "average_finish", "average_qualifying", "average_teammate_finish_delta"].includes(row.metric),
+  );
+  driverCompareSummaryEl.innerHTML = important
+    .map((row) => `
+      <div>
+        <span>${metricLabel(row.metric)}</span>
+        <strong>${driverA}: ${metricValue(row.driver_a, row.metric)} | ${driverB}: ${metricValue(row.driver_b, row.metric)}</strong>
+        <small>${row.leader ? `${row.leader} edge` : "Even or not enough data"}</small>
+      </div>
+    `)
+    .join("");
+  renderDriverRatings(payload.ratings ?? {});
+}
+
+function renderDriverRatings(ratings) {
+  const entries = Object.entries(ratings);
+  if (!entries.length) {
+    driverRatingSummaryEl.innerHTML = `<span>Ratings unavailable.</span>`;
+    return;
+  }
+  driverRatingSummaryEl.innerHTML = entries
+    .map(([driver, values]) => `
+      <article class="rating-card">
+        <h3>${driver}</h3>
+        ${Object.entries(values)
+          .filter(([key]) => key !== "overall_evidence_score")
+          .map(([key, value]) => ratingBar(metricLabel(key), value))
+          .join("")}
+        ${ratingBar("Evidence score", values.overall_evidence_score)}
+      </article>
+    `)
+    .join("");
+}
+
+function ratingBar(label, value) {
+  const number = value === null || value === undefined ? NaN : Number(value);
+  const width = Number.isFinite(number) ? Math.max(0, Math.min(100, number)) : 0;
+  return `
+    <div class="rating-row">
+      <span>${label}</span>
+      <strong>${Number.isFinite(number) ? number.toFixed(1) : "TBD"}</strong>
+      <i style="width:${width}%"></i>
+    </div>
+  `;
+}
+
+function metricLabel(metric) {
+  return String(metric)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function metricValue(value, metric) {
+  if (value === null || value === undefined) return "TBD";
+  if (String(metric).includes("rate")) return `${Math.round(Number(value) * 100)}%`;
+  return Number.isFinite(Number(value)) ? Number(value).toFixed(String(metric).includes("average") ? 2 : 0) : value;
 }
 
 async function loadGeekReports() {
@@ -955,6 +1034,7 @@ historyRacesEl.addEventListener("click", (event) => {
 });
 historyDriverEl.addEventListener("change", loadHistoryDriver);
 historyTeamEl.addEventListener("change", loadHistoryTeam);
+compareDriversButton.addEventListener("click", loadDriverCompare);
 languageSelect.addEventListener("change", () => {
   activeLanguage = languageSelect.value;
   localStorage.setItem("f1-language", activeLanguage);
