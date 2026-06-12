@@ -1128,6 +1128,41 @@ tbody tr:hover {
   margin-top: 8px;
 }
 
+.compatibility-hero {
+  align-items: stretch;
+  background:
+    linear-gradient(135deg, rgba(225, 6, 0, 0.22), transparent 34%),
+    radial-gradient(circle at 80% 18%, rgba(45, 212, 191, 0.16), transparent 30%),
+    linear-gradient(180deg, #151b26, #090d14);
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 0.9fr 1.4fr;
+  margin-top: 14px;
+}
+
+.compatibility-hero h3 {
+  font-size: clamp(34px, 6vw, 72px);
+  letter-spacing: 0;
+  line-height: 0.95;
+}
+
+.compatibility-hero p,
+.compatibility-card p {
+  color: #aab5c5;
+  font-weight: 800;
+  margin-top: 8px;
+}
+
+.compatibility-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compatibility-card small {
+  color: #d7dee9;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .compact-action {
   margin-top: 12px;
   min-height: 38px;
@@ -1256,6 +1291,7 @@ tbody tr:hover {
   .race-facts,
   .benchmark-score-grid,
   .compare-layout,
+  .compatibility-hero,
   .circuit-profile-hero,
   .driver-profile-hero,
   .team-profile-hero,
@@ -1263,6 +1299,7 @@ tbody tr:hover {
   .profile-layout,
   .profile-stat-grid,
   .rating-grid,
+  .compatibility-grid,
   .trend-grid,
   .future-grid,
   .session-grid {

@@ -81,6 +81,15 @@ const teamCircuitStrengthsEl = document.querySelector("#team-circuit-strengths")
 const teamLineupHistoryEl = document.querySelector("#team-lineup-history");
 const teamRaceLogTitleEl = document.querySelector("#team-race-log-title");
 const teamRaceLogEl = document.querySelector("#team-race-log");
+const compatDriverEl = document.querySelector("#compat-driver");
+const compatTeamEl = document.querySelector("#compat-team");
+const runCompatibilityButton = document.querySelector("#run-compatibility");
+const compatCoverageEl = document.querySelector("#compat-coverage");
+const compatibilityHeroEl = document.querySelector("#compatibility-hero");
+const compatibilityComponentsEl = document.querySelector("#compatibility-components");
+const compatibilityContextEl = document.querySelector("#compatibility-context");
+const compatibilityLinksEl = document.querySelector("#compatibility-links");
+const compatibilityNotesEl = document.querySelector("#compatibility-notes");
 
 let countdownTimer = null;
 let activeMode = "basic";
@@ -96,6 +105,7 @@ let historyLoaded = false;
 let profileLoaded = false;
 let circuitLoaded = false;
 let teamProfileLoaded = false;
+let compatibilityLoaded = false;
 let selectedHistoryRace = null;
 
 const I18N = {
@@ -762,6 +772,9 @@ function setProductSection(section) {
   if (section === "teams" && !teamProfileLoaded) {
     loadTeamProfile();
   }
+  if (section === "lab" && !compatibilityLoaded) {
+    loadCompatibility();
+  }
 }
 
 async function loadHistory() {
@@ -1203,9 +1216,12 @@ function renderProfileRaceLog(payload) {
 }
 
 function renderProfileCompareShortcuts(code, shortcuts) {
-  profileCompareShortcutsEl.innerHTML = shortcuts.length
+  const teams = [...profileHeroEl.querySelectorAll("[data-open-team]")].map((button) => button.dataset.openTeam);
+  const labButtons = teams.map((team) => `<button type="button" data-open-compat-driver="${code}" data-open-compat-team="${team}">Fit with ${team}</button>`).join("");
+  const compareButtons = shortcuts.length
     ? shortcuts.map((teammate) => `<button type="button" data-compare-profile="${teammate}">Compare ${code} vs ${teammate}</button>`).join("")
     : `<span class="status">No teammate shortcut yet</span>`;
+  profileCompareShortcutsEl.innerHTML = `${labButtons}${compareButtons}`;
 }
 
 async function loadCircuitProfile(key = null) {
@@ -1321,6 +1337,7 @@ function renderTeamProfile(payload) {
       <span class="profile-code">constructor</span>
       <h3>${team}</h3>
       <p>${(summary.drivers ?? []).slice(0, 6).join(" / ") || "Lineup history TBD"}</p>
+      <button class="secondary compact-action" type="button" data-open-compat-team="${team}">Open in Compatibility Lab</button>
     </div>
     <div class="profile-stat-grid">
       <div><span>Entries</span><strong>${summary.entries ?? 0}</strong></div>
@@ -1399,6 +1416,95 @@ function renderTeamRaceLog(payload) {
       <td>${fixed(row.points, 1)}</td>
     </tr>
   `).join("") || `<tr><td colspan="6">No team race log available.</td></tr>`;
+}
+
+async function loadCompatibility(driver = null, team = null) {
+  compatibilityLoaded = true;
+  const driverCode = (driver || compatDriverEl.value || profileDriverEl.value || "ANT").trim().toUpperCase();
+  const teamName = team || compatTeamEl.value || teamProfileKeyEl.value || "Mercedes";
+  compatDriverEl.value = driverCode;
+  compatTeamEl.value = teamName;
+  compatibilityHeroEl.textContent = "Loading compatibility evidence...";
+  compatibilityComponentsEl.textContent = "Loading fit dimensions...";
+  const response = await fetch(`/api/lab/compatibility/driver-team?driver_code=${encodeURIComponent(driverCode)}&team_name=${encodeURIComponent(teamName)}`);
+  const payload = await response.json();
+  renderCompatibility(payload);
+}
+
+function renderCompatibility(payload) {
+  const driver = payload.driver ?? {};
+  const team = payload.team ?? {};
+  const score = payload.compatibility_score;
+  const confidence = payload.confidence ?? "low";
+  const metadata = payload.metadata ?? {};
+  const coverage = metadata.coverage ?? {};
+  compatCoverageEl.textContent = `${coverage.broad_results ?? "Broad result history"}; ${coverage.rich_session_detail ?? "rich modern detail when available"}.`;
+  compatibilityHeroEl.innerHTML = `
+    <div>
+      <span class="profile-code">driver-to-team fit</span>
+      <h3>${driver.code ?? "DRI"} -> ${team.name ?? "Team"}</h3>
+      <p>${driver.name ?? driver.code ?? "Driver"} measured against ${team.name ?? "constructor"} evidence.</p>
+    </div>
+    <div class="profile-stat-grid">
+      <div><span>Compatibility</span><strong>${score === null || score === undefined ? "TBD" : `${Number(score).toFixed(1)}`}</strong></div>
+      <div><span>Confidence</span><strong>${conditionLabel(confidence)}</strong></div>
+      <div><span>Evidence fields</span><strong>${payload.evidence_count ?? 0}</strong></div>
+      <div><span>TBD fields</span><strong>${payload.tbd_count ?? 0}</strong></div>
+      <div><span>Driver starts</span><strong>${driver.summary?.starts ?? 0}</strong></div>
+      <div><span>Team entries</span><strong>${team.summary?.entries ?? 0}</strong></div>
+    </div>
+  `;
+  renderCompatibilityComponents(payload.components ?? []);
+  renderCompatibilityContext(payload);
+  renderCompatibilityNotes(payload);
+}
+
+function renderCompatibilityComponents(components) {
+  compatibilityComponentsEl.innerHTML = components.length
+    ? components.map((component) => compatibilityComponentCard(component)).join("")
+    : `<article class="rating-card"><h3>Fit dimensions</h3><p>TBD</p></article>`;
+}
+
+function compatibilityComponentCard(component) {
+  const score = component.score === null || component.score === undefined ? null : Number(component.score);
+  const width = Number.isFinite(score) ? Math.max(0, Math.min(100, score)) : 0;
+  return `
+    <article class="rating-card compatibility-card">
+      <h3>${component.label ?? "Dimension"}</h3>
+      <div class="rating-row">
+        <span>Fit score</span>
+        <strong>${Number.isFinite(score) ? score.toFixed(1) : "TBD"}</strong>
+        <i style="width:${width}%"></i>
+      </div>
+      <small>Driver ${component.driver_score ?? "TBD"} | Team ${component.team_score ?? "TBD"}</small>
+      <p>${component.note ?? "Evidence note pending."}</p>
+    </article>
+  `;
+}
+
+function renderCompatibilityContext(payload) {
+  const driver = payload.driver ?? {};
+  const team = payload.team ?? {};
+  const lineup = team.current_lineup ?? [];
+  compatibilityContextEl.innerHTML = `
+    <div><span>Driver recent form</span><strong>Avg finish ${fixed(driver.recent_form?.average_finish, 1)}</strong></div>
+    <div><span>Driver podiums</span><strong>${driver.summary?.podiums ?? 0}</strong></div>
+    <div><span>Team lineup</span><strong>${formatDriverCodes(lineup.map((row) => row.driver_code).filter(Boolean))}</strong></div>
+    <div><span>Team podiums</span><strong>${team.summary?.podiums ?? 0}</strong></div>
+  `;
+}
+
+function renderCompatibilityNotes(payload) {
+  compatibilityLinksEl.innerHTML = `
+    <button type="button" data-open-driver="${payload.driver?.code ?? "ANT"}">Driver profile</button>
+    <button type="button" data-open-team="${payload.team?.name ?? "Mercedes"}">Team profile</button>
+  `;
+  compatibilityNotesEl.innerHTML = (payload.notes ?? []).map((note) => `
+    <div>
+      <span>Lab note</span>
+      <strong>${note}</strong>
+    </div>
+  `).join("");
 }
 
 function renderDriverRatings(ratings) {
@@ -1534,6 +1640,23 @@ document.addEventListener("click", (event) => {
   setProductSection("teams");
   loadTeamProfile(button.dataset.openTeam);
 });
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-open-driver]");
+  if (!button) return;
+  profileDriverEl.value = button.dataset.openDriver;
+  setProductSection("driver-ratings");
+  loadDriverProfile();
+});
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-open-compat-team], [data-open-compat-driver]");
+  if (!button) return;
+  const driver = button.dataset.openCompatDriver || compatDriverEl.value || profileDriverEl.value || "ANT";
+  const team = button.dataset.openCompatTeam || compatTeamEl.value || teamProfileKeyEl.value || "Mercedes";
+  compatDriverEl.value = driver;
+  compatTeamEl.value = team;
+  setProductSection("lab");
+  loadCompatibility(driver, team);
+});
 profileCompareShortcutsEl.addEventListener("click", (event) => {
   const button = event.target.closest("[data-compare-profile]");
   if (!button) return;
@@ -1542,6 +1665,9 @@ profileCompareShortcutsEl.addEventListener("click", (event) => {
   setProductSection("history");
   loadDriverCompare();
 });
+runCompatibilityButton.addEventListener("click", () => loadCompatibility());
+compatDriverEl.addEventListener("change", () => loadCompatibility());
+compatTeamEl.addEventListener("change", () => loadCompatibility());
 languageSelect.addEventListener("change", () => {
   activeLanguage = languageSelect.value;
   localStorage.setItem("f1-language", activeLanguage);

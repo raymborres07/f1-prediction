@@ -472,9 +472,39 @@
       </section>
 
       <section class="history-section app-section product-section" data-product-section="lab" hidden>
-        <p class="eyebrow">Lab</p>
-        <h2>Compatibility simulator</h2>
-        <p class="panel-copy">Driver-car fit and setup compatibility experiments belong here, separate from factual race forecasts.</p>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Compatibility Lab</p>
+            <h2>Evidence-based driver-to-team fit</h2>
+          </div>
+          <div class="history-controls">
+            <label>
+              Driver
+              <input id="compat-driver" value="ANT" maxlength="4" />
+            </label>
+            <label>
+              Team
+              <input id="compat-team" value="Mercedes" />
+            </label>
+            <button id="run-compatibility" type="button">Run Fit</button>
+          </div>
+        </div>
+        <p class="panel-copy" id="compat-coverage">This lab uses historical evidence from profiles. It is not a fantasy matchup engine yet.</p>
+        <section class="compatibility-hero panel" id="compatibility-hero">Loading compatibility lab.</section>
+        <section class="history-layout profile-layout">
+          <div class="rating-grid compatibility-grid" id="compatibility-components"></div>
+          <div class="history-summary-grid" id="compatibility-context"></div>
+        </section>
+        <section class="panel">
+          <div class="section-heading table-heading">
+            <div>
+              <p class="eyebrow">Evidence Notes</p>
+              <h2>Why this fit scores this way</h2>
+            </div>
+            <div class="compare-shortcuts" id="compatibility-links"></div>
+          </div>
+          <div class="history-context-grid split-grid" id="compatibility-notes"></div>
+        </section>
       </section>
 
       <section class="history-section app-section product-section" data-product-section="what-if" hidden>

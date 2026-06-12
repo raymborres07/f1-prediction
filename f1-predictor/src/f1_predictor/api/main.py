@@ -2057,6 +2057,143 @@ def _history_driver_rating_payload(driver_code: str) -> dict[str, object]:
     }
 
 
+def _compat_value(value: object) -> float | None:
+    number = pd.to_numeric(value, errors="coerce")
+    return None if pd.isna(number) else float(number)
+
+
+def _compat_component(
+    key: str,
+    label: str,
+    driver_value: object,
+    team_value: object | None = None,
+    note: str = "",
+) -> dict[str, object]:
+    driver_score = _compat_value(driver_value)
+    team_score = _compat_value(team_value)
+    if driver_score is None:
+        return {
+            "key": key,
+            "label": label,
+            "score": None,
+            "driver_score": None,
+            "team_score": team_score,
+            "status": "TBD",
+            "note": note or "Driver evidence is too thin for this dimension.",
+        }
+    score = (driver_score * 0.72 + team_score * 0.28) if team_score is not None else driver_score
+    return {
+        "key": key,
+        "label": label,
+        "score": round(float(max(0, min(100, score))), 1),
+        "driver_score": round(float(driver_score), 1),
+        "team_score": round(float(team_score), 1) if team_score is not None else None,
+        "status": "evidence",
+        "note": note,
+    }
+
+
+def _latest_numeric(rows: list[dict[str, object]], key: str) -> float | None:
+    for row in reversed(rows or []):
+        value = _compat_value(row.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _lab_driver_team_compatibility_payload(driver_code: str, team_name: str) -> dict[str, object]:
+    driver = _history_driver_profile_payload(driver_code, window=5)
+    team = _history_team_profile_payload(team_name, window=5)
+    ratings = driver.get("ratings", {})
+    recent_form = driver.get("recent_form", {})
+    team_race_score = _rating_from_lower(_latest_numeric(team.get("trend_points", []), "rolling_average_finish"), 2, 18)
+    team_quali_score = _rating_from_lower(_latest_numeric(team.get("qualifying_trend", []), "rolling_average_qualifying"), 2, 18)
+    recent_driver_score = _rating_from_lower(recent_form.get("average_finish"), 2, 18)
+    recent_team_score = team_race_score
+    components = [
+        _compat_component(
+            "qualifying_pace",
+            "Qualifying pace",
+            ratings.get("qualifying_pace"),
+            team_quali_score,
+            "Blends driver one-lap evidence with the team's recent qualifying platform.",
+        ),
+        _compat_component(
+            "race_pace",
+            "Race pace",
+            ratings.get("race_pace"),
+            team_race_score,
+            "Blends driver finish evidence with the team's rolling race form.",
+        ),
+        _compat_component(
+            "tyre_management",
+            "Tyre management",
+            ratings.get("tyre_management"),
+            None,
+            "Uses stint-length evidence where rich stint artifacts exist.",
+        ),
+        _compat_component(
+            "consistency",
+            "Consistency",
+            ratings.get("consistency"),
+            None,
+            "Uses finish-position spread as the current consistency proxy.",
+        ),
+        _compat_component(
+            "wet_weather",
+            "Wet-weather skill",
+            ratings.get("wet_weather"),
+            None,
+            "Limited to result evidence at wet-risk events until richer weather-tagged history grows.",
+        ),
+        _compat_component(
+            "street_circuit",
+            "Street-circuit bias",
+            ratings.get("street_circuit"),
+            None,
+            "Uses driver performance on street-style circuits where present.",
+        ),
+        _compat_component(
+            "recent_form",
+            "Recent form",
+            recent_driver_score,
+            recent_team_score,
+            "Compares the driver's recent finish form with the team's current rolling race form.",
+        ),
+    ]
+    available = [component["score"] for component in components if component.get("score") is not None]
+    score = round(float(pd.Series(available).mean()), 1) if available else None
+    confidence = "low"
+    if len(available) >= 6:
+        confidence = "high"
+    elif len(available) >= 4:
+        confidence = "medium"
+    return {
+        "driver": {
+            "code": driver.get("driver_code"),
+            "name": driver.get("driver_name"),
+            "summary": driver.get("summary", {}),
+            "recent_form": recent_form,
+        },
+        "team": {
+            "name": team.get("team_name"),
+            "summary": team.get("summary", {}),
+            "current_lineup": team.get("current_lineup", []),
+        },
+        "compatibility_score": score,
+        "confidence": confidence,
+        "components": components,
+        "evidence_count": len(available),
+        "tbd_count": len(components) - len(available),
+        "notes": [
+            "Compatibility is evidence-based, not a fantasy guarantee.",
+            "Driver evidence is weighted more heavily than team context in this MVP.",
+            "TBD means the current packaged history does not support that dimension strongly enough.",
+        ],
+        "metadata": _history_scope_metadata(),
+    }
+
+
 def _rating_from_lower(value: object, best: float, worst: float) -> float | None:
     number = pd.to_numeric(value, errors="coerce")
     if pd.isna(number):
@@ -2236,6 +2373,11 @@ def history_team(team_name: str) -> dict[str, object]:
 @app.get("/api/history/profiles/teams/{team_name}")
 def history_team_profile(team_name: str, window: int = 5) -> dict[str, object]:
     return _history_team_profile_payload(team_name, window)
+
+
+@app.get("/api/lab/compatibility/driver-team")
+def lab_driver_team_compatibility(driver_code: str = "ANT", team_name: str = "Mercedes") -> dict[str, object]:
+    return _lab_driver_team_compatibility_payload(driver_code, team_name)
 
 
 @app.get("/api/history/compare/drivers/{driver_a}/{driver_b}")
