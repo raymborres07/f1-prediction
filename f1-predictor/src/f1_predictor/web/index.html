@@ -43,7 +43,7 @@
         <button class="tab active" type="button" data-section="race-hub" data-i18n="race_hub">Race Hub</button>
         <button class="tab" type="button" data-section="live-race" data-i18n="live_race">Live Race</button>
         <button class="tab" type="button" data-section="history" data-i18n="history">History</button>
-        <button class="tab" type="button" data-section="driver-ratings" data-i18n="driver_ratings">Driver Ratings</button>
+        <button class="tab" type="button" data-section="driver-ratings" data-i18n="driver_ratings">Driver Profiles</button>
         <button class="tab" type="button" data-section="lab" data-i18n="compatibility_lab">Compatibility Lab</button>
         <button class="tab" type="button" data-section="what-if" data-i18n="what_if">What-If Matchups</button>
       </nav>
@@ -316,9 +316,55 @@
       </section>
 
       <section class="history-section app-section product-section" data-product-section="driver-ratings" hidden>
-        <p class="eyebrow">Driver Ratings</p>
-        <h2>Evidence-backed attributes</h2>
-        <p class="panel-copy">Qualifying pace, race pace, tyre management, wet-weather skill, consistency, and recovery-drive ratings should be derived from the History layer first.</p>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Driver Profiles</p>
+            <h2>Evidence-backed driver dossier</h2>
+          </div>
+          <div class="history-controls">
+            <label>
+              Driver
+              <input id="profile-driver" value="ANT" maxlength="4" />
+            </label>
+            <button id="load-profile" type="button">Load Profile</button>
+          </div>
+        </div>
+        <p class="panel-copy" id="profile-coverage">Profiles use broad result history plus richer modern timing and telemetry where generated.</p>
+        <section class="driver-profile-hero panel" id="driver-profile-hero">Loading driver profile.</section>
+        <section class="history-layout profile-layout">
+          <div class="trend-grid profile-trends" id="profile-trend-charts"></div>
+          <div class="rating-grid" id="profile-rating-summary"></div>
+        </section>
+        <section class="history-layout profile-layout">
+          <div class="history-context-grid split-grid" id="profile-split-summary"></div>
+          <div class="history-summary-grid" id="profile-teammate-summary"></div>
+        </section>
+        <section class="panel">
+          <div class="section-heading table-heading">
+            <div>
+              <p class="eyebrow">Race Log</p>
+              <h2 id="profile-race-log-title">Historical race log</h2>
+            </div>
+            <div class="compare-shortcuts" id="profile-compare-shortcuts"></div>
+          </div>
+          <div class="table-wrap compact-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Year</th>
+                  <th>Race</th>
+                  <th>Team</th>
+                  <th>Grid</th>
+                  <th>Finish</th>
+                  <th>Points</th>
+                </tr>
+              </thead>
+              <tbody id="profile-race-log">
+                <tr><td colspan="6">Load a driver profile.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
       <section class="history-section app-section product-section" data-product-section="lab" hidden>

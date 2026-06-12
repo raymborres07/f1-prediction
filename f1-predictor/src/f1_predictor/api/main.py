@@ -1720,6 +1720,53 @@ def _history_compare_driver_splits_payload(driver_a: str, driver_b: str) -> dict
     }
 
 
+def _history_driver_profile_payload(driver_code: str, window: int = 5) -> dict[str, object]:
+    code = driver_code.upper()
+    driver = _history_driver_payload(code)
+    metrics = _history_driver_metric_summary(code)
+    trends = _history_driver_trends_payload(code, window)
+    ratings = _history_driver_rating_payload(code)
+    trend_points = trends.get("trend_points", [])
+    recent = trend_points[-_bounded_trend_window(window):]
+    recent_finish = pd.to_numeric(pd.Series([row.get("finish_position") for row in recent]), errors="coerce").dropna()
+    recent_quali = pd.to_numeric(pd.Series([row.get("qualifying_position") for row in recent]), errors="coerce").dropna()
+    latest_season = next(iter(driver.get("season_summaries", [])), {})
+    compare_shortcuts = [
+        row.get("teammate")
+        for row in driver.get("teammate_summary", [])
+        if row.get("teammate")
+    ]
+    return {
+        "driver_code": code,
+        "driver_name": driver.get("driver_name", code),
+        "summary": driver.get("summary", {}),
+        "latest_season": latest_season,
+        "recent_form": {
+            "window": len(recent),
+            "average_finish": round(float(recent_finish.mean()), 2) if not recent_finish.empty else None,
+            "average_qualifying": round(float(recent_quali.mean()), 2) if not recent_quali.empty else None,
+            "wins": int(sum(1 for row in recent if row.get("finish_position") == 1)),
+            "podiums": int(sum(1 for row in recent if row.get("finish_position") is not None and row.get("finish_position") <= 3)),
+        },
+        "trend_points": trend_points,
+        "charts": [
+            {"key": "rolling_finish", "label": "Rolling finish", "lower_is_better": True},
+            {"key": "rolling_qualifying", "label": "Rolling qualifying", "lower_is_better": True},
+            {"key": "teammate_delta", "label": "Teammate delta", "lower_is_better": True},
+        ],
+        "track_type_splits": {
+            "street": metrics.get("street_circuit"),
+            "permanent": metrics.get("permanent_circuit"),
+        },
+        "teammate_summary": driver.get("teammate_summary", []),
+        "ratings": ratings.get("ratings", {}),
+        "rating_inputs": ratings.get("inputs", {}),
+        "race_log": driver.get("results", [])[:40],
+        "compare_shortcuts": sorted(set(compare_shortcuts))[:6],
+        "metadata": _history_scope_metadata(),
+    }
+
+
 def _metric_leader(driver_a: str, value_a: object, driver_b: str, value_b: object, metric: str) -> str | None:
     a = pd.to_numeric(value_a, errors="coerce")
     b = pd.to_numeric(value_b, errors="coerce")
@@ -1917,6 +1964,11 @@ def history_laps(year: int, round_number: int, limit: int = 250) -> dict[str, ob
 @app.get("/api/history/drivers/{driver_code}")
 def history_driver(driver_code: str) -> dict[str, object]:
     return _history_driver_payload(driver_code)
+
+
+@app.get("/api/history/profiles/drivers/{driver_code}")
+def history_driver_profile(driver_code: str, window: int = 5) -> dict[str, object]:
+    return _history_driver_profile_payload(driver_code, window)
 
 
 @app.get("/api/history/teams/{team_name}")

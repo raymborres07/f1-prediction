@@ -50,6 +50,17 @@ const driverCompareSummaryEl = document.querySelector("#driver-compare-summary")
 const driverRatingSummaryEl = document.querySelector("#driver-rating-summary");
 const driverTrendChartsEl = document.querySelector("#driver-trend-charts");
 const driverSplitSummaryEl = document.querySelector("#driver-split-summary");
+const profileDriverEl = document.querySelector("#profile-driver");
+const loadProfileButton = document.querySelector("#load-profile");
+const profileCoverageEl = document.querySelector("#profile-coverage");
+const profileHeroEl = document.querySelector("#driver-profile-hero");
+const profileTrendChartsEl = document.querySelector("#profile-trend-charts");
+const profileRatingSummaryEl = document.querySelector("#profile-rating-summary");
+const profileSplitSummaryEl = document.querySelector("#profile-split-summary");
+const profileTeammateSummaryEl = document.querySelector("#profile-teammate-summary");
+const profileCompareShortcutsEl = document.querySelector("#profile-compare-shortcuts");
+const profileRaceLogTitleEl = document.querySelector("#profile-race-log-title");
+const profileRaceLogEl = document.querySelector("#profile-race-log");
 
 let countdownTimer = null;
 let activeMode = "basic";
@@ -62,6 +73,7 @@ let qualifyingPayload = null;
 let weekendPayload = null;
 let statesPayload = null;
 let historyLoaded = false;
+let profileLoaded = false;
 let selectedHistoryRace = null;
 
 const I18N = {
@@ -75,7 +87,7 @@ const I18N = {
     race_hub: "Race Hub",
     live_race: "Live Race",
     history: "History",
-    driver_ratings: "Driver Ratings",
+    driver_ratings: "Driver Profiles",
     compatibility_lab: "Compatibility Lab",
     what_if: "What-If Matchups",
     sunny: "Sunny",
@@ -701,6 +713,9 @@ function setProductSection(section) {
   if (section === "history" && !historyLoaded) {
     loadHistory();
   }
+  if (section === "driver-ratings" && !profileLoaded) {
+    loadDriverProfile();
+  }
 }
 
 async function loadHistory() {
@@ -1028,6 +1043,124 @@ function renderDriverSplits(payload) {
   `;
 }
 
+async function loadDriverProfile() {
+  profileLoaded = true;
+  const code = (profileDriverEl.value || historyDriverEl.value || "ANT").trim().toUpperCase();
+  profileDriverEl.value = code;
+  profileHeroEl.textContent = "Loading driver profile...";
+  profileTrendChartsEl.textContent = "Loading form charts...";
+  profileRatingSummaryEl.textContent = "Loading rating evidence...";
+  const response = await fetch(`/api/history/profiles/drivers/${encodeURIComponent(code)}?window=5`);
+  const payload = await response.json();
+  renderDriverProfile(payload);
+}
+
+function renderDriverProfile(payload) {
+  const code = payload.driver_code ?? "TBD";
+  const summary = payload.summary ?? {};
+  const latest = payload.latest_season ?? {};
+  const form = payload.recent_form ?? {};
+  const metadata = payload.metadata ?? {};
+  const coverage = metadata.coverage ?? {};
+  profileCoverageEl.textContent = `${coverage.broad_results ?? "Broad result history"}; ${coverage.rich_session_detail ?? "rich modern detail when available"}.`;
+  profileHeroEl.innerHTML = `
+    <div>
+      <span class="profile-code">${code}</span>
+      <h3>${payload.driver_name ?? code}</h3>
+      <p>${(summary.teams ?? []).join(" / ") || "Team history TBD"}</p>
+    </div>
+    <div class="profile-stat-grid">
+      <div><span>Starts</span><strong>${summary.starts ?? 0}</strong></div>
+      <div><span>Wins</span><strong>${summary.wins ?? 0}</strong></div>
+      <div><span>Podiums</span><strong>${summary.podiums ?? 0}</strong></div>
+      <div><span>Points</span><strong>${fixed(summary.points, 1)}</strong></div>
+      <div><span>Latest season</span><strong>${latest.year ?? "TBD"}: ${latest.wins ?? 0}W / ${latest.podiums ?? 0}P</strong></div>
+      <div><span>Recent form</span><strong>Avg finish ${fixed(form.average_finish, 1)} | Avg quali ${fixed(form.average_qualifying, 1)}</strong></div>
+    </div>
+  `;
+  renderProfileTrends(payload);
+  renderProfileRatings(payload.ratings ?? {});
+  renderProfileSplits(payload.track_type_splits ?? {});
+  renderProfileTeammates(payload.teammate_summary ?? []);
+  renderProfileRaceLog(payload);
+  renderProfileCompareShortcuts(code, payload.compare_shortcuts ?? []);
+}
+
+function renderProfileTrends(payload) {
+  const code = payload.driver_code ?? "DRI";
+  const series = { [code]: payload.trend_points ?? [] };
+  const charts = payload.charts ?? [];
+  profileTrendChartsEl.innerHTML = charts.length
+    ? charts.map((chart) => trendChart(chart.label, chart.key, series, [code], chart.lower_is_better)).join("")
+    : `<article class="trend-card"><h3>Recent form</h3><p>TBD until history artifacts are generated.</p></article>`;
+}
+
+function renderProfileRatings(ratings) {
+  if (!Object.keys(ratings).length) {
+    profileRatingSummaryEl.innerHTML = `<span>Rating evidence unavailable.</span>`;
+    return;
+  }
+  profileRatingSummaryEl.innerHTML = `
+    <article class="rating-card profile-rating-card">
+      <h3>Evidence ratings</h3>
+      ${Object.entries(ratings)
+        .filter(([key]) => key !== "overall_evidence_score")
+        .map(([key, value]) => ratingBar(metricLabel(key), value))
+        .join("")}
+      ${ratingBar("Evidence score", ratings.overall_evidence_score)}
+    </article>
+  `;
+}
+
+function renderProfileSplits(splits) {
+  profileSplitSummaryEl.innerHTML = ["street", "permanent"].map((type) => {
+    const split = splits[type] ?? {};
+    const label = type === "street" ? "Street circuits" : "Permanent circuits";
+    return `
+      <div>
+        <span>${label}</span>
+        <strong>${split.starts ?? 0} starts | avg P${split.average_finish === null || split.average_finish === undefined ? "TBD" : Number(split.average_finish).toFixed(1)}</strong>
+        <small>${split.wins ?? 0} wins | ${split.podiums ?? 0} podiums</small>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderProfileTeammates(teammates) {
+  if (!teammates.length) {
+    profileTeammateSummaryEl.innerHTML = `<div><span>Teammate delta</span><strong>TBD</strong></div>`;
+    return;
+  }
+  profileTeammateSummaryEl.innerHTML = teammates.slice(0, 4).map((row) => `
+    <div>
+      <span>${row.year ?? "Year"} vs ${row.teammate ?? "TBD"}</span>
+      <strong>${row.head_to_head_wins ?? 0}/${row.comparisons ?? 0} ahead</strong>
+      <small>Avg finish delta ${fixed(row.average_finish_delta, 2)}</small>
+    </div>
+  `).join("");
+}
+
+function renderProfileRaceLog(payload) {
+  const rows = payload.race_log ?? [];
+  profileRaceLogTitleEl.textContent = `${payload.driver_code ?? "Driver"} historical race log`;
+  profileRaceLogEl.innerHTML = rows.map((row) => `
+    <tr>
+      <td>${row.year ?? ""}</td>
+      <td>${row.event_name ?? `Round ${row.round ?? ""}`}</td>
+      <td>${row.constructor_name ?? ""}</td>
+      <td>${row.grid_position ? `P${fixed(row.grid_position, 0)}` : "TBD"}</td>
+      <td>${row.finish_position ? `P${fixed(row.finish_position, 0)}` : "TBD"}</td>
+      <td>${fixed(row.points, 1)}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="6">No race log available.</td></tr>`;
+}
+
+function renderProfileCompareShortcuts(code, shortcuts) {
+  profileCompareShortcutsEl.innerHTML = shortcuts.length
+    ? shortcuts.map((teammate) => `<button type="button" data-compare-profile="${teammate}">Compare ${code} vs ${teammate}</button>`).join("")
+    : `<span class="status">No teammate shortcut yet</span>`;
+}
+
 function renderDriverRatings(ratings) {
   const entries = Object.entries(ratings);
   if (!entries.length) {
@@ -1141,6 +1274,16 @@ historyRacesEl.addEventListener("click", (event) => {
 historyDriverEl.addEventListener("change", loadHistoryDriver);
 historyTeamEl.addEventListener("change", loadHistoryTeam);
 compareDriversButton.addEventListener("click", loadDriverCompare);
+loadProfileButton.addEventListener("click", loadDriverProfile);
+profileDriverEl.addEventListener("change", loadDriverProfile);
+profileCompareShortcutsEl.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-compare-profile]");
+  if (!button) return;
+  compareDriverAEl.value = (profileDriverEl.value || "ANT").trim().toUpperCase();
+  compareDriverBEl.value = button.dataset.compareProfile;
+  setProductSection("history");
+  loadDriverCompare();
+});
 languageSelect.addEventListener("change", () => {
   activeLanguage = languageSelect.value;
   localStorage.setItem("f1-language", activeLanguage);
