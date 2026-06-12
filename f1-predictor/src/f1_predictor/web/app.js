@@ -13,6 +13,14 @@ const modelCard = document.querySelector("#model-card");
 const modelCardBody = document.querySelector("#model-card-body");
 const modelCardOpen = document.querySelector("#model-card-open");
 const modelCardClose = document.querySelector("#model-card-close");
+const tourOpenButton = document.querySelector("#tour-open");
+const tourOverlay = document.querySelector("#tour-overlay");
+const tourStepEl = document.querySelector("#tour-step");
+const tourTitleEl = document.querySelector("#tour-title");
+const tourBodyEl = document.querySelector("#tour-body");
+const tourProgressEl = document.querySelector(".tour-progress");
+const tourNextButton = document.querySelector("#tour-next");
+const tourSkipButton = document.querySelector("#tour-skip");
 const predictionsEl = document.querySelector("#predictions");
 const geekPredictionsEl = document.querySelector("#geek-predictions");
 const predictionHeadEl = document.querySelector("#prediction-head");
@@ -123,6 +131,8 @@ let teamProfileLoaded = false;
 let compatibilityLoaded = false;
 let whatIfLoaded = false;
 let selectedHistoryRace = null;
+let activeTourStep = 0;
+let tourReturnSection = "race-hub";
 
 const I18N = {
   en: {
@@ -131,6 +141,7 @@ const I18N = {
     basic_mode: "Basic Mode",
     geek_mode: "Geek Mode",
     model_card: "Model Card",
+    help: "Help",
     refresh: "Refresh",
     race_hub: "Race Hub",
     live_race: "Live Race",
@@ -158,6 +169,7 @@ const I18N = {
     basic_mode: "Modo Basico",
     geek_mode: "Modo Geek",
     model_card: "Ficha del modelo",
+    help: "Ayuda",
     refresh: "Actualizar",
     race_hub: "Carrera",
     live_race: "En vivo",
@@ -242,11 +254,88 @@ function coverageBadges(metadata = {}) {
   const coverage = metadata.coverage ?? {};
   return `
     <span class="coverage-badges">
-      <i>Broad results</i>
-      <i>${coverage.rich_session_detail ? "Rich modern data" : "Rich data where available"}</i>
-      <i>${coverage.deep_modern_detail ? "OpenF1 2023+" : "Era-limited detail"}</i>
+      <i title="Race results and qualifying-style history are available across the packaged archive.">Broad results</i>
+      <i title="Modern races can include laps, stints, tyres, weather, and timing context.">${coverage.rich_session_detail ? "Rich modern data" : "Rich data where available"}</i>
+      <i title="OpenF1-backed detail is strongest from 2023 onward; older seasons can be thinner.">${coverage.deep_modern_detail ? "OpenF1 2023+" : "Era-limited detail"}</i>
     </span>
   `;
+}
+
+const TOUR_STEPS = [
+  {
+    section: "race-hub",
+    selector: "#race",
+    title: "Start with the Race Hub",
+    body: "This is the fan view: next race, countdown, weather, forecast state, and clean qualifying or race tables.",
+  },
+  {
+    section: "history",
+    selector: "[data-product-section='history']",
+    title: "Use History for context",
+    body: "Browse seasons and races first. Geek mode adds richer lap, tyre, stint, and comparison detail when the data exists.",
+  },
+  {
+    section: "driver-ratings",
+    selector: "[data-product-section='driver-ratings']",
+    title: "Open driver profiles",
+    body: "Profiles explain form, splits, teammate context, and rating evidence without pretending every era has equal data depth.",
+  },
+  {
+    section: "lab",
+    selector: "[data-product-section='lab']",
+    title: "Try Compatibility Lab",
+    body: "Driver-to-team fit is evidence-based. TBD means the app does not have enough support yet, not that the score is zero.",
+  },
+  {
+    section: "what-if",
+    selector: "[data-product-section='what-if']",
+    title: "Share What-If Matchups",
+    body: "Matchups are simulated projections. Share links preserve the drivers, circuit, session, and condition for someone else.",
+  },
+];
+
+function openTour(step = 0) {
+  tourReturnSection = activeSection || "race-hub";
+  activeTourStep = Math.max(0, Math.min(step, TOUR_STEPS.length - 1));
+  tourOverlay.hidden = false;
+  document.body.classList.add("tour-active");
+  renderTourStep();
+}
+
+function closeTour(markSeen = true) {
+  tourOverlay.hidden = true;
+  document.body.classList.remove("tour-active");
+  document.querySelectorAll(".tour-highlight").forEach((node) => node.classList.remove("tour-highlight"));
+  if (markSeen) localStorage.setItem("f1-tour-seen", "true");
+  if (tourReturnSection) setProductSection(tourReturnSection);
+}
+
+function renderTourStep() {
+  const step = TOUR_STEPS[activeTourStep];
+  setProductSection(step.section);
+  tourStepEl.textContent = `Step ${activeTourStep + 1} of ${TOUR_STEPS.length}`;
+  tourTitleEl.textContent = step.title;
+  tourBodyEl.textContent = step.body;
+  tourNextButton.textContent = activeTourStep === TOUR_STEPS.length - 1 ? "Finish" : "Next";
+  tourProgressEl.innerHTML = TOUR_STEPS
+    .map((_, index) => `<i class="${index === activeTourStep ? "active" : ""}"></i>`)
+    .join("");
+  document.querySelectorAll(".tour-highlight").forEach((node) => node.classList.remove("tour-highlight"));
+  const target = document.querySelector(step.selector);
+  if (target) target.classList.add("tour-highlight");
+  requestAnimationFrame(() => {
+    if (!target) return;
+    target.scrollIntoView({ block: "center", behavior: "smooth" });
+  });
+}
+
+function advanceTour() {
+  if (activeTourStep >= TOUR_STEPS.length - 1) {
+    closeTour(true);
+    return;
+  }
+  activeTourStep += 1;
+  renderTourStep();
 }
 
 function temp(value, decimals = 0) {
@@ -295,6 +384,10 @@ function pct(value) {
 function fixed(value, decimals = 1) {
   const number = Number(value);
   return Number.isFinite(number) ? number.toFixed(decimals) : "TBD";
+}
+
+function emptyTableMessage(title, body) {
+  return `<div class="empty-state table-empty"><strong>${title}</strong><p>${body}</p></div>`;
 }
 
 function circuitKey(value) {
@@ -422,7 +515,12 @@ function renderSessions(weekend) {
   const sessions = weekend.sessions ?? [];
   weatherNoteEl.textContent = weekend.weather_note ?? "Live weather shown when available.";
   if (!sessions.length) {
-    sessionsEl.innerHTML = `<span>Session schedule unavailable.</span>`;
+    sessionsEl.innerHTML = `
+      <div class="empty-state">
+        <strong>Session schedule is not packaged yet.</strong>
+        <p>The Race Hub can still show predictions, but weather cards need weekend schedule data from the latest refresh.</p>
+      </div>
+    `;
     return;
   }
   sessionsEl.innerHTML = sessions
@@ -551,7 +649,7 @@ function renderForecastTables() {
 function renderRaceTable(predictions, target, limit = 5, geek = false) {
   const rows = predictions.slice(0, limit);
   if (!rows.length) {
-    target.innerHTML = `<tr><td colspan="${geek ? 10 : 7}">No race predictions available.</td></tr>`;
+    target.innerHTML = `<tr><td colspan="${geek ? 10 : 7}">${emptyTableMessage("Race forecast missing", "Run the latest prediction export or use the packaged demo snapshot.")}</td></tr>`;
     return;
   }
   if (!geek) {
@@ -619,7 +717,7 @@ function renderQualifyingTable(predictions) {
   `;
   const rows = predictions;
   if (!rows.length) {
-    predictionsEl.innerHTML = `<tr><td colspan="6">No qualifying forecast available.</td></tr>`;
+    predictionsEl.innerHTML = `<tr><td colspan="6">${emptyTableMessage("Qualifying forecast missing", "This view needs the qualifying prediction artifact, or a fresh weekend refresh.")}</td></tr>`;
     return;
   }
   predictionsEl.innerHTML = rows
@@ -670,7 +768,7 @@ function renderBasicNote(metadata, weekend) {
 function renderForecastStates(payload) {
   const states = payload?.states ?? [];
   if (!states.length) {
-    forecastStatesEl.innerHTML = `<span>Forecast state unavailable</span>`;
+    forecastStatesEl.innerHTML = `<span class="empty-inline">Forecast timeline missing. The app can still show predictions, but state changes need the forecast-state artifact.</span>`;
     return;
   }
   forecastStatesEl.innerHTML = states
@@ -817,7 +915,12 @@ function renderDiagnostics(rows) {
 
 function renderBenchmark(benchmark) {
   if (!benchmark?.scorecard) {
-    benchmarkEl.innerHTML = `<span>Benchmark unavailable.</span>`;
+    benchmarkEl.innerHTML = `
+      <div class="empty-state">
+        <strong>No benchmark card packaged.</strong>
+        <p>Benchmarks appear here after a replay snapshot is exported for a race such as Monaco or Spain.</p>
+      </div>
+    `;
     return;
   }
   const score = benchmark.scorecard;
@@ -886,7 +989,12 @@ async function loadHistory() {
     await loadHistoryYear(selectedYear);
     await Promise.all([loadHistoryDriver(), loadHistoryTeam(), loadDriverCompare()]);
   } catch (error) {
-    historyRacesEl.textContent = `History unavailable: ${error.message}`;
+    historyRacesEl.innerHTML = `
+      <div class="empty-state">
+        <strong>History did not load.</strong>
+        <p>${error.message}. Check that packaged history artifacts are present for the selected season.</p>
+      </div>
+    `;
   }
 }
 
@@ -991,10 +1099,10 @@ function renderHistoryGeekContext(payload) {
   const stints = payload.stint_summary ?? [];
   const tyreText = tyres.length
     ? tyres.slice(0, 4).map((row) => `${row.compound ?? "?"}: ${fixed(row.total_laps, 0)} laps`).join(" | ")
-    : "Tyre usage unavailable";
+    : "No packaged tyre table for this race yet";
   const stintText = stints.length
     ? stints.slice(0, 4).map((row) => `${row.driver_code}: ${fixed(row.stints, 0)} stints`).join(" | ")
-    : "Stint summary unavailable";
+    : "No packaged stint table for this race yet";
   historyGeekContextEl.innerHTML = `
     <div><span>Tyre usage</span><strong>${tyreText}</strong></div>
     <div><span>Stint leaders</span><strong>${stintText}</strong></div>
@@ -1112,7 +1220,7 @@ function renderDriverTrendCharts(payload) {
   const series = payload.series ?? {};
   const charts = payload.charts ?? [];
   if (!drivers.length || !charts.length) {
-    driverTrendChartsEl.innerHTML = `<article class="trend-card"><h3>Trend charts</h3><p>Trend data unavailable for this pairing.</p></article>`;
+    driverTrendChartsEl.innerHTML = `<article class="trend-card"><h3>Trend charts</h3><p>No trend rows are packaged for this pairing yet. Try a modern-era driver pair or refresh the history export.</p></article>`;
     return;
   }
   driverTrendChartsEl.innerHTML = charts
@@ -1253,7 +1361,7 @@ function renderProfileTrends(payload) {
 
 function renderProfileRatings(ratings) {
   if (!Object.keys(ratings).length) {
-    profileRatingSummaryEl.innerHTML = `<span>Rating evidence unavailable.</span>`;
+    profileRatingSummaryEl.innerHTML = `<div class="empty-state"><strong>Rating evidence is thin.</strong><p>This profile needs richer modern race or session rows before the app can show reliable evidence metrics.</p></div>`;
     return;
   }
   profileRatingSummaryEl.innerHTML = `
@@ -1729,7 +1837,7 @@ function explanationList(title, rows, valueKey) {
 function renderDriverRatings(ratings) {
   const entries = Object.entries(ratings);
   if (!entries.length) {
-    driverRatingSummaryEl.innerHTML = `<span>Ratings unavailable.</span>`;
+    driverRatingSummaryEl.innerHTML = `<div class="empty-state"><strong>Ratings are not ready for this selection.</strong><p>The app keeps weak evidence as TBD instead of inventing a score.</p></div>`;
     return;
   }
   driverRatingSummaryEl.innerHTML = entries
@@ -1815,11 +1923,11 @@ async function loadPredictions() {
     if (activeMode === "geek") await loadGeekReports();
     statusEl.textContent = `Updated ${new Date().toLocaleTimeString()} - ${racePayload.metadata?.prediction_mode ?? "pre-weekend forecast"}`;
   } catch (error) {
-    raceEl.innerHTML = `<span>Prediction data unavailable</span>`;
-    metadataEl.innerHTML = `<span>Metadata unavailable</span>`;
-    sessionsEl.innerHTML = `<span>Session schedule unavailable</span>`;
-    predictionsEl.innerHTML = `<tr><td colspan="7">${error.message}</td></tr>`;
-    geekPredictionsEl.innerHTML = `<tr><td colspan="10">${error.message}</td></tr>`;
+    raceEl.innerHTML = `<div class="empty-state"><strong>Prediction data unavailable.</strong><p>The app could not load the packaged forecast snapshot. ${error.message}</p></div>`;
+    metadataEl.innerHTML = `<span>Metadata missing: refresh the demo export or check the prediction API.</span>`;
+    sessionsEl.innerHTML = `<div class="empty-state"><strong>Schedule and weather unavailable.</strong><p>Weekend cards need the current weekend artifact or a live API response.</p></div>`;
+    predictionsEl.innerHTML = `<tr><td colspan="7">${emptyTableMessage("Forecast table could not load", error.message)}</td></tr>`;
+    geekPredictionsEl.innerHTML = `<tr><td colspan="10">${emptyTableMessage("Geek forecast table could not load", error.message)}</td></tr>`;
     statusEl.textContent = "Run ingestion, feature generation, and training first.";
   } finally {
     refreshButton.disabled = false;
@@ -1933,6 +2041,12 @@ unitSelect.addEventListener("change", () => {
 });
 modelCardOpen.addEventListener("click", () => modelCard.showModal());
 modelCardClose.addEventListener("click", () => modelCard.close());
+tourOpenButton.addEventListener("click", () => openTour(0));
+tourNextButton.addEventListener("click", advanceTour);
+tourSkipButton.addEventListener("click", () => closeTour(true));
+tourOverlay.addEventListener("click", (event) => {
+  if (event.target === tourOverlay) closeTour(true);
+});
 setMode("basic");
 const params = initialParams();
 if (params.get("section") === "lab") {
@@ -1951,3 +2065,6 @@ if (params.get("section") === "lab") {
 }
 applyPreferences();
 loadPredictions();
+if (!localStorage.getItem("f1-tour-seen") && !params.get("section")) {
+  window.setTimeout(() => openTour(0), 1000);
+}

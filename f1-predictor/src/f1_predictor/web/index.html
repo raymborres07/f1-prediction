@@ -34,6 +34,7 @@
             <button id="basic-mode" class="mode-button active" type="button" data-i18n="basic_mode">Basic Mode</button>
             <button id="geek-mode" class="mode-button" type="button" data-i18n="geek_mode">Geek Mode</button>
           </div>
+          <button id="tour-open" class="secondary" type="button" data-i18n="help">Help</button>
           <button id="model-card-open" class="secondary geek-only" type="button" data-i18n="model_card">Model Card</button>
           <button id="refresh" type="button" data-i18n="refresh">Refresh</button>
         </div>
@@ -123,6 +124,26 @@
       </section>
 
       <section class="panel-grid geek-only app-section race-hub-section">
+        <section class="panel whats-new-panel">
+          <h2>What's New</h2>
+          <div class="whats-new-list">
+            <article>
+              <span>Jun 2026 - New</span>
+              <strong>Shareable labs</strong>
+              <p>Compatibility and What-If links now reopen the exact drivers, team, circuit, session, and condition.</p>
+            </article>
+            <article>
+              <span>Jun 2026 - Improved</span>
+              <strong>Evidence clarity</strong>
+              <p>Cards now explain whether a result uses rich modern timing data or thinner historical evidence.</p>
+            </article>
+            <article>
+              <span>Jun 2026 - Improved</span>
+              <strong>Race-weekend guidance</strong>
+              <p>The Race Hub separates qualifying and race forecasts so the forecast state is easier to follow.</p>
+            </article>
+          </div>
+        </section>
         <section class="panel">
           <h2>Backtest Metrics</h2>
           <div class="metric-grid" id="metrics">
@@ -512,6 +533,11 @@
           </div>
           <div class="explain-card" id="compatibility-explain">Top evidence will appear after running a fit.</div>
           <div class="history-context-grid split-grid" id="compatibility-notes"></div>
+          <div class="feedback-card">
+            <strong>Does this fit feel off?</strong>
+            <p>Tell us which driver-team pairing needs a better explanation or stronger evidence.</p>
+            <a href="https://github.com/raymborres07/f1-prediction/issues/new" target="_blank" rel="noreferrer">Send feedback</a>
+          </div>
         </section>
       </section>
 
@@ -568,9 +594,27 @@
           </div>
           <div class="explain-card" id="whatif-explain">Top matchup evidence will appear after running a simulation.</div>
           <div class="history-context-grid split-grid" id="whatif-notes"></div>
+          <div class="feedback-card">
+            <strong>Confusing matchup?</strong>
+            <p>Share the scenario URL and what result surprised you so the evidence notes can improve.</p>
+            <a href="https://github.com/raymborres07/f1-prediction/issues/new" target="_blank" rel="noreferrer">Send feedback</a>
+          </div>
         </section>
       </section>
     </main>
+
+    <div id="tour-overlay" class="tour-overlay" hidden>
+      <section class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title">
+        <p class="eyebrow" id="tour-step">Step 1 of 5</p>
+        <h2 id="tour-title">Start with the Race Hub</h2>
+        <p id="tour-body">Check the next race, weather, forecast state, and the clean qualifying/race tables first.</p>
+        <div class="tour-progress" aria-hidden="true"></div>
+        <div class="tour-actions">
+          <button id="tour-skip" class="secondary" type="button">Skip</button>
+          <button id="tour-next" type="button">Next</button>
+        </div>
+      </section>
+    </div>
 
     <dialog id="model-card" class="model-card">
       <div class="drawer-header">

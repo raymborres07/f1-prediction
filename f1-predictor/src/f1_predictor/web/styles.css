@@ -97,6 +97,11 @@ button:disabled {
   gap: 10px;
 }
 
+.actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .preference-controls {
   align-items: center;
   display: flex;
@@ -604,6 +609,81 @@ body[data-mode="geek"] .basic-only {
 
 .panel {
   padding: 16px;
+}
+
+.whats-new-panel {
+  border-left: 4px solid #2dd4bf;
+}
+
+.whats-new-list {
+  display: grid;
+  gap: 10px;
+}
+
+.whats-new-list article,
+.feedback-card,
+.empty-state {
+  background: #0d121b;
+  border: 1px solid #263244;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.whats-new-list span {
+  color: #2dd4bf;
+  display: block;
+  font-size: 11px;
+  font-weight: 1000;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.whats-new-list strong,
+.feedback-card strong,
+.empty-state strong {
+  color: #f5f7fb;
+  display: block;
+  font-size: 15px;
+  margin-bottom: 5px;
+}
+
+.whats-new-list p,
+.feedback-card p,
+.empty-state p {
+  color: #aab5c5;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.feedback-card {
+  border-left: 4px solid #e10600;
+  margin-top: 12px;
+}
+
+.feedback-card a {
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 1000;
+  margin-top: 10px;
+  text-decoration-color: #e10600;
+}
+
+.table-empty {
+  margin: 2px 0;
+  text-align: left;
+}
+
+.empty-inline {
+  background: #0d121b;
+  border: 1px solid #263244;
+  border-radius: 999px;
+  color: #c8d1df;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 9px 12px;
 }
 
 .panel-copy,
@@ -1267,6 +1347,67 @@ tbody tr:hover {
   color: #aab5c5;
   font-weight: 800;
   line-height: 1.4;
+}
+
+.tour-overlay {
+  align-items: end;
+  background: rgba(3, 6, 12, 0.44);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 40;
+}
+
+.tour-card {
+  background: linear-gradient(180deg, #151b26, #090d14);
+  border: 1px solid #3a4658;
+  border-left: 5px solid #e10600;
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.44);
+  display: grid;
+  gap: 10px;
+  max-width: 520px;
+  padding: 18px;
+  width: min(520px, 100%);
+}
+
+.tour-card p:not(.eyebrow) {
+  color: #c8d1df;
+  line-height: 1.45;
+  margin-bottom: 0;
+}
+
+.tour-progress {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.tour-progress i {
+  background: #3a4658;
+  border-radius: 999px;
+  display: block;
+  height: 6px;
+  width: 32px;
+}
+
+.tour-progress i.active {
+  background: #e10600;
+}
+
+.tour-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.tour-highlight {
+  outline: 2px solid #2dd4bf;
+  outline-offset: 5px;
+  position: relative;
+  z-index: 2;
 }
 
 .matchup-bar {
