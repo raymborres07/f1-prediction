@@ -368,48 +368,79 @@ body[data-mode="geek"] .basic-only {
   top: 0;
 }
 
-.session-card.weather-dry::before {
+.session-card.weather-sunny::before {
   background: linear-gradient(90deg, #f59e0b, #ef4444);
 }
 
-.session-card.weather-risk::before {
+.session-card.weather-dry::before {
+  background: linear-gradient(90deg, #fbbf24, #22c55e);
+}
+
+.session-card.weather-cloudy::before {
+  background: linear-gradient(90deg, #94a3b8, #475569);
+}
+
+.session-card.weather-damp::before {
   background: linear-gradient(90deg, #f59e0b, #facc15);
 }
 
-.session-card.weather-rain::before {
+.session-card.weather-wet::before {
   background: linear-gradient(90deg, #38bdf8, #2563eb);
+}
+
+.session-card.weather-storm::before {
+  background: linear-gradient(90deg, #818cf8, #e10600);
 }
 
 .weather-icon {
   align-items: center;
-  background: rgba(255, 255, 255, 0.08);
+  background: radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06));
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  border-radius: 50%;
   color: #ffffff;
   display: inline-flex;
-  font-size: 31px;
+  font-size: 42px;
   font-weight: 950;
-  height: 78px;
+  height: 86px;
   justify-content: center;
   letter-spacing: 0;
-  width: 104px;
+  width: 86px;
 }
 
+.weather-icon span {
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.35));
+}
+
+.weather-sunny .weather-icon,
 .weather-dry .weather-icon {
   color: #fbbf24;
 }
 
-.weather-risk .weather-icon {
+.weather-cloudy .weather-icon {
+  color: #cbd5e1;
+}
+
+.weather-damp .weather-icon {
   color: #fde047;
 }
 
-.weather-rain .weather-icon {
+.weather-wet .weather-icon {
   color: #7dd3fc;
+}
+
+.weather-storm .weather-icon {
+  color: #c4b5fd;
 }
 
 .session-main {
   display: grid;
   gap: 4px;
+}
+
+.session-main p {
+  color: #f5f7fb;
+  font-size: 20px;
+  font-weight: 950;
 }
 
 .session-card span,
@@ -709,6 +740,38 @@ tbody tr:hover {
   margin-top: 14px;
 }
 
+.season-card-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.season-card {
+  background: linear-gradient(180deg, #151b26, #0d121b);
+  border: 1px solid #263244;
+  border-left: 4px solid #e10600;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+
+.season-card span {
+  color: #aab5c5;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.season-card strong {
+  font-size: 22px;
+}
+
+.season-card small {
+  color: #aab5c5;
+}
+
 .history-detail {
   min-width: 0;
 }
@@ -739,21 +802,28 @@ tbody tr:hover {
   color: #aab5c5;
 }
 
-.history-summary-grid {
+.history-summary-grid,
+.history-context-grid {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 14px;
 }
 
-.history-summary-grid div {
+.history-summary-grid div,
+.history-context-grid div {
   background: #0d121b;
   border: 1px solid #263244;
   border-radius: 6px;
   padding: 12px;
 }
 
-.history-summary-grid span {
+.history-summary-grid .wide {
+  grid-column: span 2;
+}
+
+.history-summary-grid span,
+.history-context-grid span {
   color: #aab5c5;
   display: block;
   font-size: 11px;
@@ -762,8 +832,10 @@ tbody tr:hover {
   text-transform: uppercase;
 }
 
-.history-summary-grid strong {
+.history-summary-grid strong,
+.history-context-grid strong {
   font-size: 16px;
+  overflow-wrap: anywhere;
 }
 
 .compact-table table {

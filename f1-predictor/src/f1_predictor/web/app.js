@@ -30,12 +30,15 @@ const historySeasonEl = document.querySelector("#history-season");
 const historyDriverEl = document.querySelector("#history-driver");
 const historyTeamEl = document.querySelector("#history-team");
 const historyCoverageEl = document.querySelector("#history-coverage");
+const historySeasonCardsEl = document.querySelector("#history-season-cards");
 const historyRacesEl = document.querySelector("#history-races");
 const historyRaceTitleEl = document.querySelector("#history-race-title");
 const historySummaryEl = document.querySelector("#history-summary");
+const historyRaceContextEl = document.querySelector("#history-race-context");
 const historyResultsEl = document.querySelector("#history-results");
 const historyDriverSummaryEl = document.querySelector("#history-driver-summary");
 const historyTeamSummaryEl = document.querySelector("#history-team-summary");
+const historyGeekContextEl = document.querySelector("#history-geek-context");
 const historyLapsEl = document.querySelector("#history-laps");
 const historyLapStatusEl = document.querySelector("#history-lap-status");
 
@@ -157,13 +160,16 @@ function renderSessions(weekend) {
   sessionsEl.innerHTML = sessions
     .map((session) => {
       const weather = session.weather;
-      const risk = weatherRisk(weather);
+      const condition = weatherCondition(weather);
       return `
-        <article class="session-card ${risk.className}">
-          <div class="weather-icon">${risk.label}</div>
+        <article class="session-card ${condition.className}">
+          <div class="weather-icon" aria-label="${condition.label}">
+            <span>${condition.icon}</span>
+          </div>
           <div class="session-main">
             <strong>${session.name}</strong>
             <span>${formatDate(session.starts_at, weekend.race?.timezone)}</span>
+            <p>${condition.label}</p>
           </div>
           <div class="weather-stats">
             <div><span>Air</span><strong>${weather ? `${fixed(weather.air_temp_c, 0)}C` : "TBD"}</strong></div>
@@ -173,7 +179,7 @@ function renderSessions(weekend) {
           </div>
           ${renderForecastStrip(weather)}
           <small>
-            ${session.time_status ?? "scheduled"} - ${risk.riskText} - ${weather?.weather_risk_reason ?? session.weather_status ?? "weather pending"}
+            ${session.time_status ?? "scheduled"} - ${condition.supportingText} - ${weather?.weather_condition_reason ?? session.weather_status ?? "weather pending"}
           </small>
         </article>
       `;
@@ -181,19 +187,23 @@ function renderSessions(weekend) {
     .join("");
 }
 
-function weatherRisk(weather) {
-  if (!weather) return { label: "TBD", className: "weather-unknown", riskText: "Risk TBD" };
-  const score = Number(weather.weather_risk_score ?? weather.risk_score);
-  if (Number.isFinite(score)) {
-    if (score >= 60) return { label: "HIGH", className: "weather-rain", riskText: `Risk ${score}/100` };
-    if (score >= 30) return { label: "MED", className: "weather-risk", riskText: `Risk ${score}/100` };
-    return { label: "LOW", className: "weather-dry", riskText: `Risk ${score}/100` };
+function weatherCondition(weather) {
+  if (!weather) return { label: "TBD", icon: "–", className: "weather-unknown", supportingText: "Risk TBD" };
+  if (weather.weather_condition && weather.weather_icon && weather.weather_class) {
+    const score = Number(weather.weather_risk_score ?? weather.risk_score);
+    return {
+      label: weather.weather_condition,
+      icon: weather.weather_icon,
+      className: weather.weather_class,
+      supportingText: Number.isFinite(score) ? `Risk ${score}/100` : "Risk TBD",
+    };
   }
   const rain = Number(weather.rain_probability || 0);
   const cloud = Number(weather.cloud_cover || 0);
-  if (rain >= 45) return { label: "WET", className: "weather-rain", riskText: "Risk high" };
-  if (rain >= 20 || cloud >= 70) return { label: "RISK", className: "weather-risk", riskText: "Risk medium" };
-  return { label: "DRY", className: "weather-dry", riskText: "Risk low" };
+  if (rain >= 45) return { label: "Wet", icon: "🌧️", className: "weather-wet", supportingText: "Risk high" };
+  if (rain >= 20) return { label: "Damp Risk", icon: "🌦️", className: "weather-damp", supportingText: "Risk medium" };
+  if (cloud >= 70) return { label: "Cloudy", icon: "☁️", className: "weather-cloudy", supportingText: "Risk low" };
+  return { label: "Dry", icon: "🌤️", className: "weather-dry", supportingText: "Risk low" };
 }
 
 function renderForecastStrip(weather) {
@@ -563,6 +573,7 @@ async function loadHistory() {
     const seasons = await seasonsResponse.json();
     renderHistoryCoverage(seasons.metadata ?? {});
     renderSeasonOptions(seasons.seasons ?? []);
+    renderSeasonCards(seasons.season_cards ?? []);
     const selectedYear = Number(historySeasonEl.value || seasons.seasons?.[0]?.year || 2026);
     await loadHistoryYear(selectedYear);
     await Promise.all([loadHistoryDriver(), loadHistoryTeam()]);
@@ -580,6 +591,26 @@ function renderSeasonOptions(seasons) {
   historySeasonEl.innerHTML = seasons
     .map((season) => `<option value="${season.year}">${season.year} (${season.event_count ?? 0} races)</option>`)
     .join("");
+}
+
+function renderSeasonCards(cards) {
+  historySeasonCardsEl.innerHTML = cards
+    .map((card) => `
+      <article class="season-card">
+        <span>${card.year}</span>
+        <strong>${card.race_count ?? 0} races</strong>
+        <small>Wins leader: ${leaderText(card.wins_leader)}</small>
+        <small>Podiums: ${leaderText(card.podiums_leader)}</small>
+        <small>Points: ${leaderText(card.points_leader, "value")}</small>
+        <small>Poles: ${leaderText(card.pole_leader)}</small>
+      </article>
+    `)
+    .join("");
+}
+
+function leaderText(leader, valueKey = "count") {
+  if (!leader) return "TBD";
+  return `${leader.code ?? "TBD"} (${leader[valueKey] ?? 0})`;
 }
 
 async function loadHistoryYear(year) {
@@ -619,12 +650,20 @@ function renderHistoryRace(payload) {
   historyRaceTitleEl.textContent = `${event.year ?? ""} ${event.event_name ?? `Round ${event.round}`}`;
   const podium = payload.podium ?? [];
   const fastest = payload.fastest_laps ?? [];
+  const weather = payload.weather_summary ?? {};
   historySummaryEl.innerHTML = `
     <div><span>Winner</span><strong>${podium[0]?.driver_code ?? "TBD"}</strong></div>
     <div><span>Podium</span><strong>${formatDriverCodes(podium.map((row) => row.driver_code).filter(Boolean))}</strong></div>
     <div><span>Pole</span><strong>${payload.qualifying_top10?.[0]?.driver_code ?? "TBD"}</strong></div>
     <div><span>Fastest lap</span><strong>${fastest[0]?.driver_code ?? "TBD"}</strong></div>
   `;
+  historyRaceContextEl.innerHTML = `
+    <div><span>Avg air</span><strong>${weather.average_air_temp_c ?? "TBD"}C</strong></div>
+    <div><span>Avg track</span><strong>${weather.average_track_temp_c ?? "TBD"}C</strong></div>
+    <div><span>Rain samples</span><strong>${weather.rain_samples ?? 0}</strong></div>
+    <div><span>Wind</span><strong>${weather.average_wind_kph ?? "TBD"} kph</strong></div>
+  `;
+  renderHistoryGeekContext(payload);
   historyResultsEl.innerHTML = (payload.race_results ?? [])
     .map((row) => `
       <tr>
@@ -636,6 +675,21 @@ function renderHistoryRace(payload) {
       </tr>
     `)
     .join("") || `<tr><td colspan="5">No race results available.</td></tr>`;
+}
+
+function renderHistoryGeekContext(payload) {
+  const tyres = payload.tyre_summary ?? [];
+  const stints = payload.stint_summary ?? [];
+  const tyreText = tyres.length
+    ? tyres.slice(0, 4).map((row) => `${row.compound ?? "?"}: ${fixed(row.total_laps, 0)} laps`).join(" · ")
+    : "Tyre usage unavailable";
+  const stintText = stints.length
+    ? stints.slice(0, 4).map((row) => `${row.driver_code}: ${fixed(row.stints, 0)} stints`).join(" · ")
+    : "Stint summary unavailable";
+  historyGeekContextEl.innerHTML = `
+    <div><span>Tyre usage</span><strong>${tyreText}</strong></div>
+    <div><span>Stint leaders</span><strong>${stintText}</strong></div>
+  `;
 }
 
 function renderHistoryLaps(payload) {
@@ -670,17 +724,17 @@ async function loadHistoryDriver() {
   const code = (historyDriverEl.value || "ANT").trim().toUpperCase();
   const response = await fetch(`/api/history/drivers/${encodeURIComponent(code)}`);
   const payload = await response.json();
-  renderHistoryEntitySummary(historyDriverSummaryEl, payload.summary ?? {}, payload.driver_name ?? code);
+  renderHistoryEntitySummary(historyDriverSummaryEl, payload.summary ?? {}, payload.driver_name ?? code, payload.season_summaries ?? [], payload.teammate_summary ?? []);
 }
 
 async function loadHistoryTeam() {
   const team = (historyTeamEl.value || "Mercedes").trim();
   const response = await fetch(`/api/history/teams/${encodeURIComponent(team)}`);
   const payload = await response.json();
-  renderHistoryEntitySummary(historyTeamSummaryEl, payload.summary ?? {}, payload.team_name ?? team);
+  renderHistoryEntitySummary(historyTeamSummaryEl, payload.summary ?? {}, payload.team_name ?? team, payload.season_summaries ?? [], payload.lineup_history ?? []);
 }
 
-function renderHistoryEntitySummary(target, summary, title) {
+function renderHistoryEntitySummary(target, summary, title, seasons = [], comparison = []) {
   const cards = [
     ["Name", title],
     ["Starts/Entries", summary.starts ?? summary.entries ?? 0],
@@ -689,7 +743,17 @@ function renderHistoryEntitySummary(target, summary, title) {
     ["Avg finish", summary.average_finish ?? "TBD"],
     ["Points", summary.points ?? "TBD"],
   ];
-  target.innerHTML = cards.map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("");
+  const seasonText = seasons.length
+    ? seasons.slice(0, 3).map((row) => `${row.year}: ${row.wins}W, ${row.podiums}P, ${fixed(row.average_finish, 1)} avg`).join(" · ")
+    : "Season trends pending";
+  const comparisonText = comparison.length
+    ? comparison.slice(0, 3).map((row) => `${row.teammate ?? row.drivers?.join("/") ?? row.year}: ${row.head_to_head_wins ?? row.drivers?.join(", ") ?? ""}`).join(" · ")
+    : "Comparison detail pending";
+  target.innerHTML = `
+    ${cards.map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("")}
+    <div class="wide"><span>Recent seasons</span><strong>${seasonText}</strong></div>
+    <div class="wide"><span>Head-to-head / lineup</span><strong>${comparisonText}</strong></div>
+  `;
 }
 
 async function loadGeekReports() {

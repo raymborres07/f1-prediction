@@ -42,6 +42,7 @@ from f1_predictor.settings import (
     LAP_TIMES_TABLE_PATH,
     STINT_SUMMARIES_TABLE_PATH,
     SESSION_CONDITIONS_TABLE_PATH,
+    TYRE_USAGE_TABLE_PATH,
     SCHEDULE_PATH,
     SIMULATION_DISTRIBUTIONS_PATH,
     SIMULATION_METADATA_PATH,
@@ -289,6 +290,7 @@ def _weather_for_session(weather_by_time: dict[str, dict[str, object]], starts_a
     enriched["weather_risk_score"] = _weather_risk_score(enriched)
     enriched["weather_risk_label"] = _weather_risk_label(enriched["weather_risk_score"])
     enriched["weather_risk_reason"] = _weather_risk_reason(enriched)
+    enriched.update(_weather_condition(enriched))
     enriched["risk_score"] = enriched["weather_risk_score"]
     enriched["risk_label"] = enriched["weather_risk_label"]
     return enriched
@@ -342,6 +344,32 @@ def _weather_risk_reason(weather: dict[str, object]) -> str:
     return ", ".join(parts) if parts else "risk inputs unavailable"
 
 
+def _weather_condition(weather: dict[str, object]) -> dict[str, object]:
+    code = int(float(weather.get("weather_code") or 0))
+    rain = float(weather.get("rain_probability") or 0)
+    rainfall = float(weather.get("rainfall") or 0)
+    cloud = float(weather.get("cloud_cover") or 0)
+    wind = float(weather.get("wind_kph") or 0)
+    if code >= 95:
+        label, icon, class_name = "Storm Risk", "⛈️", "weather-storm"
+    elif code >= 80 or code >= 60 or rain >= 55 or rainfall >= 1:
+        label, icon, class_name = "Wet", "🌧️", "weather-wet"
+    elif rain >= 20 or rainfall > 0:
+        label, icon, class_name = "Damp Risk", "🌦️", "weather-damp"
+    elif code >= 45 or cloud >= 75:
+        label, icon, class_name = "Cloudy", "☁️", "weather-cloudy"
+    elif code == 0 and cloud <= 25 and wind < 30:
+        label, icon, class_name = "Sunny", "☀️", "weather-sunny"
+    else:
+        label, icon, class_name = "Dry", "🌤️", "weather-dry"
+    return {
+        "weather_condition": label,
+        "weather_icon": icon,
+        "weather_class": class_name,
+        "weather_condition_reason": f"{label}: rain {rain:.0f}%, cloud {cloud:.0f}%, wind {wind:.0f} kph",
+    }
+
+
 def _barcelona_sessions() -> list[dict[str, object]]:
     weather_by_time = _fetch_open_meteo_weather(BARCELONA_2026)
     sessions = []
@@ -382,6 +410,7 @@ def _fallback_session_weather(starts_at: str) -> dict[str, object]:
     weather["weather_risk_score"] = _weather_risk_score(weather)
     weather["weather_risk_label"] = _weather_risk_label(weather["weather_risk_score"])
     weather["weather_risk_reason"] = _weather_risk_reason(weather)
+    weather.update(_weather_condition(weather))
     weather["risk_score"] = weather["weather_risk_score"]
     weather["risk_label"] = weather["weather_risk_label"]
     return weather
@@ -985,6 +1014,10 @@ def _history_records(df: pd.DataFrame, limit: int | None = None) -> list[dict[st
 
 
 def _history_json_value(value: object) -> object:
+    if isinstance(value, (list, tuple)):
+        return [_history_json_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _history_json_value(item) for key, item in value.items()}
     if pd.isna(value):
         return None
     if isinstance(value, pd.Timedelta):
@@ -1051,14 +1084,64 @@ def _history_season_payload() -> dict[str, object]:
     events = _history_event_rows()
     races = _history_races()
     if events.empty:
-        return {"seasons": [], "metadata": _history_scope_metadata()}
+        return {"seasons": [], "season_cards": [], "metadata": _history_scope_metadata()}
     grouped = events.groupby("year", dropna=True).agg(event_count=("round", "nunique")).reset_index()
     if not races.empty and "driver_code" in races:
         race_counts = races.rename(columns={"season": "year"}).copy()
         race_counts["year"] = pd.to_numeric(race_counts["year"], errors="coerce")
         race_counts = race_counts.groupby("year", dropna=True).agg(result_rows=("driver_code", "count")).reset_index()
         grouped = grouped.merge(race_counts, on="year", how="left")
-    return {"seasons": _history_records(grouped.sort_values("year", ascending=False)), "metadata": _history_scope_metadata()}
+    season_cards = [_history_season_card(int(row["year"])) for _, row in grouped.sort_values("year", ascending=False).iterrows()]
+    return {
+        "seasons": _history_records(grouped.sort_values("year", ascending=False)),
+        "season_cards": season_cards,
+        "metadata": _history_scope_metadata(),
+    }
+
+
+def _history_season_card(year: int) -> dict[str, object]:
+    races = _history_race_rows(year)
+    qualifying = _history_quali_rows(year)
+    if races.empty:
+        return {"year": year, "wins_leader": None, "podiums_leader": None, "points_leader": None, "pole_leader": None}
+    frame = races.copy()
+    frame["finish_position"] = pd.to_numeric(frame.get("finish_position"), errors="coerce")
+    points = pd.to_numeric(frame.get("points"), errors="coerce").fillna(0) if "points" in frame else pd.Series(dtype=float)
+    frame["points_numeric"] = points
+    wins = _leader_record(frame[frame["finish_position"] == 1], "driver_code")
+    podiums = _leader_record(frame[frame["finish_position"] <= 3], "driver_code")
+    points_leader = _leader_from_sum(frame, "driver_code", "points_numeric")
+    pole_leader = None
+    if not qualifying.empty:
+        q = qualifying.copy()
+        q["qualifying_position"] = pd.to_numeric(q.get("qualifying_position"), errors="coerce")
+        pole_leader = _leader_record(q[q["qualifying_position"] == 1], "driver_code")
+    return {
+        "year": year,
+        "race_count": int(frame["round"].nunique()) if "round" in frame else int(len(frame)),
+        "wins_leader": wins,
+        "podiums_leader": podiums,
+        "points_leader": points_leader,
+        "pole_leader": pole_leader,
+    }
+
+
+def _leader_record(rows: pd.DataFrame, column: str) -> dict[str, object] | None:
+    if rows.empty or column not in rows:
+        return None
+    counts = rows[column].dropna().astype(str).value_counts()
+    if counts.empty:
+        return None
+    return {"code": counts.index[0], "count": int(counts.iloc[0])}
+
+
+def _leader_from_sum(rows: pd.DataFrame, group_column: str, value_column: str) -> dict[str, object] | None:
+    if rows.empty or group_column not in rows or value_column not in rows:
+        return None
+    sums = rows.groupby(group_column, dropna=True)[value_column].sum().sort_values(ascending=False)
+    if sums.empty:
+        return None
+    return {"code": str(sums.index[0]), "value": round(float(sums.iloc[0]), 2)}
 
 
 def _history_year_payload(year: int) -> dict[str, object]:
@@ -1128,7 +1211,65 @@ def _history_summary_payload(year: int, round_number: int) -> dict[str, object]:
         "race_results": _history_records(race_rows),
         "qualifying_top10": _history_records(quali_rows.head(10)),
         "fastest_laps": _history_fastest_laps(year, round_number),
+        "stint_summary": _history_stint_summary(year, round_number),
+        "tyre_summary": _history_tyre_summary(year, round_number),
+        "weather_summary": _history_weather_summary(year, round_number),
         "metadata": _history_scope_metadata(),
+    }
+
+
+def _history_stint_summary(year: int, round_number: int) -> list[dict[str, object]]:
+    stints = _read_parquet_if_exists(STINT_SUMMARIES_TABLE_PATH)
+    if stints.empty:
+        return []
+    if "season" in stints and "year" not in stints:
+        stints = stints.rename(columns={"season": "year"})
+    stints["year"] = pd.to_numeric(stints["year"], errors="coerce").astype("Int64")
+    stints["round"] = pd.to_numeric(stints["round"], errors="coerce").astype("Int64")
+    stints = stints[(stints["year"] == year) & (stints["round"] == round_number)].copy()
+    if stints.empty:
+        return []
+    grouped = stints.groupby("driver_code", dropna=True).agg(
+        stints=("stint_number", "nunique"),
+        total_laps=("stint_laps", "sum"),
+        mean_stint_laps=("stint_laps", "mean"),
+        mean_lap_time_seconds=("mean_lap_time_seconds", "mean"),
+    ).reset_index()
+    return _history_records(grouped.sort_values(["stints", "total_laps"], ascending=[False, False]).head(12))
+
+
+def _history_tyre_summary(year: int, round_number: int) -> list[dict[str, object]]:
+    tyre = _read_parquet_if_exists(TYRE_USAGE_TABLE_PATH)
+    if tyre.empty:
+        return []
+    if "season" in tyre and "year" not in tyre:
+        tyre = tyre.rename(columns={"season": "year"})
+    tyre["year"] = pd.to_numeric(tyre["year"], errors="coerce").astype("Int64")
+    tyre["round"] = pd.to_numeric(tyre["round"], errors="coerce").astype("Int64")
+    tyre = tyre[(tyre["year"] == year) & (tyre["round"] == round_number)].copy()
+    return _history_records(tyre.sort_values("total_laps", ascending=False)) if not tyre.empty else []
+
+
+def _history_weather_summary(year: int, round_number: int) -> dict[str, object]:
+    conditions = _read_parquet_if_exists(SESSION_CONDITIONS_TABLE_PATH)
+    if conditions.empty:
+        return {}
+    if "season" in conditions and "year" not in conditions:
+        conditions = conditions.rename(columns={"season": "year"})
+    conditions["year"] = pd.to_numeric(conditions["year"], errors="coerce").astype("Int64")
+    conditions["round"] = pd.to_numeric(conditions["round"], errors="coerce").astype("Int64")
+    conditions = conditions[(conditions["year"] == year) & (conditions["round"] == round_number)].copy()
+    if conditions.empty:
+        return {}
+    air = pd.to_numeric(conditions.get("air_temperature", conditions.get("AirTemp")), errors="coerce")
+    track = pd.to_numeric(conditions.get("track_temperature", conditions.get("TrackTemp")), errors="coerce")
+    rainfall = pd.to_numeric(conditions.get("rainfall", conditions.get("Rainfall")), errors="coerce")
+    wind = pd.to_numeric(conditions.get("wind_speed", conditions.get("WindSpeed")), errors="coerce")
+    return {
+        "average_air_temp_c": round(float(air.dropna().mean()), 1) if air.notna().any() else None,
+        "average_track_temp_c": round(float(track.dropna().mean()), 1) if track.notna().any() else None,
+        "rain_samples": int((rainfall.fillna(0) > 0).sum()) if not rainfall.empty else 0,
+        "average_wind_kph": round(float(wind.dropna().mean()), 1) if wind.notna().any() else None,
     }
 
 
@@ -1186,6 +1327,8 @@ def _history_driver_payload(driver_code: str) -> dict[str, object]:
         "driver_code": code,
         "driver_name": rows["driver_name"].dropna().iloc[-1] if "driver_name" in rows and rows["driver_name"].notna().any() else code,
         "summary": summary,
+        "season_summaries": _history_entity_seasons(rows, "driver"),
+        "teammate_summary": _history_teammate_summary(code),
         "results": _history_records(rows.sort_values(["year", "round"], ascending=[False, False]).head(60)),
         "metadata": _history_scope_metadata(),
     }
@@ -1212,9 +1355,88 @@ def _history_team_payload(team_name: str) -> dict[str, object]:
     return {
         "team_name": rows["constructor_name"].dropna().iloc[-1] if rows["constructor_name"].notna().any() else team_name,
         "summary": summary,
+        "season_summaries": _history_entity_seasons(rows, "team"),
+        "lineup_history": _history_team_lineup(rows),
         "results": _history_records(rows.sort_values(["year", "round"], ascending=[False, False]).head(80)),
         "metadata": _history_scope_metadata(),
     }
+
+
+def _history_entity_seasons(rows: pd.DataFrame, entity_type: str) -> list[dict[str, object]]:
+    if rows.empty:
+        return []
+    frame = rows.copy()
+    frame["year"] = pd.to_numeric(frame["year"], errors="coerce").astype("Int64")
+    frame["finish_position"] = pd.to_numeric(frame.get("finish_position"), errors="coerce")
+    frame["grid_position"] = pd.to_numeric(frame.get("grid_position"), errors="coerce")
+    frame["points_numeric"] = pd.to_numeric(frame.get("points"), errors="coerce").fillna(0) if "points" in frame else 0
+    grouped = frame.groupby("year", dropna=True).agg(
+        entries=("round", "count"),
+        wins=("finish_position", lambda s: int((s == 1).sum())),
+        podiums=("finish_position", lambda s: int((s <= 3).sum())),
+        points=("points_numeric", "sum"),
+        average_finish=("finish_position", "mean"),
+        average_grid=("grid_position", "mean"),
+    ).reset_index()
+    if entity_type == "team" and "driver_code" in frame:
+        drivers = frame.groupby("year")["driver_code"].apply(lambda s: sorted(s.dropna().astype(str).unique().tolist())).reset_index(name="drivers")
+        grouped = grouped.merge(drivers, on="year", how="left")
+    grouped["points"] = grouped["points"].round(2)
+    grouped["average_finish"] = grouped["average_finish"].round(2)
+    grouped["average_grid"] = grouped["average_grid"].round(2)
+    return _history_records(grouped.sort_values("year", ascending=False))
+
+
+def _history_team_lineup(rows: pd.DataFrame) -> list[dict[str, object]]:
+    if rows.empty or "driver_code" not in rows:
+        return []
+    frame = rows.copy()
+    frame["year"] = pd.to_numeric(frame["year"], errors="coerce").astype("Int64")
+    lineup = frame.groupby("year")["driver_code"].apply(lambda s: sorted(s.dropna().astype(str).unique().tolist())).reset_index(name="drivers")
+    return _history_records(lineup.sort_values("year", ascending=False))
+
+
+def _history_teammate_summary(driver_code: str) -> list[dict[str, object]]:
+    races = _history_races()
+    if races.empty or "constructor_name" not in races or "driver_code" not in races:
+        return []
+    frame = races.rename(columns={"season": "year"}).copy()
+    frame["finish_position"] = pd.to_numeric(frame.get("finish_position"), errors="coerce")
+    own = frame[frame["driver_code"].astype(str).str.upper() == driver_code.upper()]
+    records = []
+    for _, row in own.iterrows():
+        teammates = frame[
+            (frame["year"] == row["year"])
+            & (frame["round"] == row["round"])
+            & (frame["constructor_name"] == row["constructor_name"])
+            & (frame["driver_code"].astype(str).str.upper() != driver_code.upper())
+        ]
+        for _, teammate in teammates.iterrows():
+            records.append(
+                {
+                    "year": row["year"],
+                    "teammate": teammate.get("driver_code"),
+                    "driver_ahead": bool(row["finish_position"] < teammate.get("finish_position"))
+                    if pd.notna(row["finish_position"]) and pd.notna(teammate.get("finish_position"))
+                    else None,
+                    "finish_delta": float(row["finish_position"] - teammate.get("finish_position"))
+                    if pd.notna(row["finish_position"]) and pd.notna(teammate.get("finish_position"))
+                    else None,
+                }
+            )
+    if not records:
+        return []
+    teammate_df = pd.DataFrame(records)
+    teammate_df = teammate_df.dropna(subset=["driver_ahead"])
+    if teammate_df.empty:
+        return []
+    grouped = teammate_df.groupby(["year", "teammate"], dropna=True).agg(
+        head_to_head_wins=("driver_ahead", "sum"),
+        comparisons=("driver_ahead", "count"),
+        average_finish_delta=("finish_delta", "mean"),
+    ).reset_index()
+    grouped["average_finish_delta"] = grouped["average_finish_delta"].round(2)
+    return _history_records(grouped.sort_values(["year", "comparisons"], ascending=[False, False]).head(12))
 
 
 @app.get("/")
