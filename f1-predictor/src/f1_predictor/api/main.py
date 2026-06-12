@@ -1519,25 +1519,135 @@ def _history_track_type(row: pd.Series) -> str:
     return "street" if any(marker in text for marker in street_markers) else "permanent"
 
 
-def _history_driver_trends_payload(driver_code: str) -> dict[str, object]:
+def _bounded_trend_window(window: int) -> int:
+    return max(2, min(int(window or 5), 10))
+
+
+def _history_driver_trend_points(driver_code: str, window: int = 5) -> list[dict[str, object]]:
+    code = driver_code.upper()
+    window = _bounded_trend_window(window)
+    rows = _history_driver_metric_frame(code)
+    if rows.empty:
+        return []
+    frame = rows.copy()
+    frame["year"] = pd.to_numeric(frame.get("year"), errors="coerce")
+    frame["round"] = pd.to_numeric(frame.get("round"), errors="coerce")
+    frame["finish_position"] = pd.to_numeric(frame.get("finish_position"), errors="coerce")
+    frame["grid_position"] = pd.to_numeric(frame.get("grid_position"), errors="coerce")
+    frame["points_numeric"] = pd.to_numeric(frame.get("points"), errors="coerce").fillna(0) if "points" in frame else 0
+    qualifying = _history_qualifying()
+    if not qualifying.empty and {"year", "round", "driver_code"}.issubset(qualifying.columns):
+        q = qualifying.copy()
+        q["year"] = pd.to_numeric(q.get("year"), errors="coerce")
+        q["round"] = pd.to_numeric(q.get("round"), errors="coerce")
+        q = q[q["driver_code"].astype(str).str.upper() == code]
+        q = q[["year", "round", "qualifying_position"]] if "qualifying_position" in q else q[["year", "round"]]
+        frame = frame.merge(q, on=["year", "round"], how="left")
+    elif "qualifying_position" not in frame:
+        frame["qualifying_position"] = pd.NA
+
+    all_races = _history_races().rename(columns={"season": "year"}).copy()
+    teammate_delta: dict[tuple[int | None, int | None], float | None] = {}
+    if not all_races.empty and {"year", "round", "constructor_name", "driver_code", "finish_position"}.issubset(all_races.columns):
+        all_races["year"] = pd.to_numeric(all_races["year"], errors="coerce")
+        all_races["round"] = pd.to_numeric(all_races["round"], errors="coerce")
+        all_races["finish_position"] = pd.to_numeric(all_races["finish_position"], errors="coerce")
+        for _, row in frame.iterrows():
+            year = int(row["year"]) if pd.notna(row.get("year")) else None
+            rnd = int(row["round"]) if pd.notna(row.get("round")) else None
+            team = row.get("constructor_name")
+            finish = row.get("finish_position")
+            if year is None or rnd is None or pd.isna(team) or pd.isna(finish):
+                continue
+            peers = all_races[
+                (all_races["year"] == year)
+                & (all_races["round"] == rnd)
+                & (all_races["constructor_name"].astype(str) == str(team))
+                & (all_races["driver_code"].astype(str).str.upper() != code)
+            ]
+            teammate_finish = pd.to_numeric(peers.get("finish_position"), errors="coerce").dropna()
+            teammate_delta[(year, rnd)] = round(float(finish - teammate_finish.mean()), 2) if not teammate_finish.empty else None
+
+    frame = frame.sort_values(["year", "round"]).reset_index(drop=True)
+    frame["rolling_finish"] = frame["finish_position"].rolling(window=window, min_periods=1).mean()
+    frame["rolling_qualifying"] = pd.to_numeric(frame.get("qualifying_position"), errors="coerce").rolling(window=window, min_periods=1).mean()
+    frame["wins_cumulative"] = (frame["finish_position"] == 1).cumsum()
+    frame["podiums_cumulative"] = (frame["finish_position"] <= 3).cumsum()
+    points: list[dict[str, object]] = []
+    for _, row in frame.iterrows():
+        year = int(row["year"]) if pd.notna(row.get("year")) else None
+        rnd = int(row["round"]) if pd.notna(row.get("round")) else None
+        points.append(
+            {
+                "year": year,
+                "round": rnd,
+                "event_name": row.get("event_name"),
+                "constructor_name": row.get("constructor_name"),
+                "finish_position": _json_value(row.get("finish_position")),
+                "grid_position": _json_value(row.get("grid_position")),
+                "qualifying_position": _json_value(row.get("qualifying_position")),
+                "points": _json_value(row.get("points_numeric")),
+                "rolling_finish": _json_value(round(float(row["rolling_finish"]), 2)) if pd.notna(row.get("rolling_finish")) else None,
+                "rolling_qualifying": _json_value(round(float(row["rolling_qualifying"]), 2)) if pd.notna(row.get("rolling_qualifying")) else None,
+                "wins_cumulative": int(row.get("wins_cumulative", 0)),
+                "podiums_cumulative": int(row.get("podiums_cumulative", 0)),
+                "teammate_delta": teammate_delta.get((year, rnd)),
+            }
+        )
+    return points
+
+
+def _history_team_trend_points(team_name: str, window: int = 5) -> list[dict[str, object]]:
+    window = _bounded_trend_window(window)
+    rows = _history_team_payload(team_name).get("results", [])
+    if not rows:
+        return []
+    frame = pd.DataFrame(rows)
+    frame["year"] = pd.to_numeric(frame.get("year"), errors="coerce")
+    frame["round"] = pd.to_numeric(frame.get("round"), errors="coerce")
+    frame["finish_position"] = pd.to_numeric(frame.get("finish_position"), errors="coerce")
+    frame["points_numeric"] = pd.to_numeric(frame.get("points"), errors="coerce").fillna(0) if "points" in frame else 0
+    if "event_name" not in frame:
+        frame["event_name"] = frame.get("race_name", frame["round"].map(lambda value: f"Round {value}"))
+    grouped = (
+        frame.groupby(["year", "round", "event_name"], dropna=True)
+        .agg(
+            average_finish=("finish_position", "mean"),
+            best_finish=("finish_position", "min"),
+            points=("points_numeric", "sum"),
+            podiums=("finish_position", lambda s: int((s <= 3).sum())),
+        )
+        .reset_index()
+        .sort_values(["year", "round"])
+    )
+    grouped["rolling_average_finish"] = grouped["average_finish"].rolling(window=window, min_periods=1).mean()
+    grouped["podiums_cumulative"] = grouped["podiums"].cumsum()
+    return _history_records(grouped)
+
+
+def _history_driver_trends_payload(driver_code: str, window: int = 5) -> dict[str, object]:
     driver = _history_driver_payload(driver_code)
     return {
         "driver_code": driver_code.upper(),
         "driver_name": driver.get("driver_name"),
+        "window": _bounded_trend_window(window),
         "season_summaries": driver.get("season_summaries", []),
         "teammate_summary": driver.get("teammate_summary", []),
         "recent_results": driver.get("results", [])[:20],
+        "trend_points": _history_driver_trend_points(driver_code, window),
         "metadata": _history_scope_metadata(),
     }
 
 
-def _history_team_trends_payload(team_name: str) -> dict[str, object]:
+def _history_team_trends_payload(team_name: str, window: int = 5) -> dict[str, object]:
     team = _history_team_payload(team_name)
     return {
         "team_name": team.get("team_name", team_name),
+        "window": _bounded_trend_window(window),
         "season_summaries": team.get("season_summaries", []),
         "lineup_history": team.get("lineup_history", []),
         "recent_results": team.get("results", [])[:30],
+        "trend_points": _history_team_trend_points(team_name, window),
         "metadata": _history_scope_metadata(),
     }
 
@@ -1576,6 +1686,36 @@ def _history_compare_drivers_payload(driver_a: str, driver_b: str) -> dict[str, 
             driver_a.upper(): _history_driver_rating_payload(driver_a)["ratings"],
             driver_b.upper(): _history_driver_rating_payload(driver_b)["ratings"],
         },
+        "metadata": _history_scope_metadata(),
+    }
+
+
+def _history_compare_driver_trends_payload(driver_a: str, driver_b: str, window: int = 5) -> dict[str, object]:
+    driver_a = driver_a.upper()
+    driver_b = driver_b.upper()
+    return {
+        "drivers": [driver_a, driver_b],
+        "window": _bounded_trend_window(window),
+        "series": {
+            driver_a: _history_driver_trend_points(driver_a, window),
+            driver_b: _history_driver_trend_points(driver_b, window),
+        },
+        "charts": [
+            {"key": "rolling_finish", "label": "Rolling finish", "lower_is_better": True},
+            {"key": "rolling_qualifying", "label": "Rolling qualifying", "lower_is_better": True},
+            {"key": "teammate_delta", "label": "Teammate delta", "lower_is_better": True},
+            {"key": "podiums_cumulative", "label": "Podium accumulation", "lower_is_better": False},
+        ],
+        "metadata": _history_scope_metadata(),
+    }
+
+
+def _history_compare_driver_splits_payload(driver_a: str, driver_b: str) -> dict[str, object]:
+    compare = _history_compare_drivers_payload(driver_a, driver_b)
+    return {
+        "drivers": [driver_a.upper(), driver_b.upper()],
+        "track_type_splits": compare.get("track_type_splits", {}),
+        "ratings": compare.get("ratings", {}),
         "metadata": _history_scope_metadata(),
     }
 
@@ -1651,7 +1791,7 @@ def _history_tyre_management_rating(driver_code: str) -> float | None:
 def _history_wet_weather_rating(rows: pd.DataFrame) -> float | None:
     if rows.empty:
         return None
-    wet = rows[rows.apply(lambda row: "singapore" in str(row.get("event_name", "")).lower() or "são paulo" in str(row.get("event_name", "")).lower(), axis=1)]
+    wet = rows[rows.apply(lambda row: "singapore" in str(row.get("event_name", "")).lower() or "paulo" in str(row.get("event_name", "")).lower(), axis=1)]
     if wet.empty:
         return None
     finish = wet["finish_position"].dropna()
@@ -1789,14 +1929,24 @@ def history_compare_drivers(driver_a: str, driver_b: str) -> dict[str, object]:
     return _history_compare_drivers_payload(driver_a, driver_b)
 
 
+@app.get("/api/history/compare/drivers/{driver_a}/{driver_b}/trends")
+def history_compare_driver_trends(driver_a: str, driver_b: str, window: int = 5) -> dict[str, object]:
+    return _history_compare_driver_trends_payload(driver_a, driver_b, window)
+
+
+@app.get("/api/history/compare/drivers/{driver_a}/{driver_b}/splits")
+def history_compare_driver_splits(driver_a: str, driver_b: str) -> dict[str, object]:
+    return _history_compare_driver_splits_payload(driver_a, driver_b)
+
+
 @app.get("/api/history/trends/drivers/{driver_code}")
-def history_driver_trends(driver_code: str) -> dict[str, object]:
-    return _history_driver_trends_payload(driver_code)
+def history_driver_trends(driver_code: str, window: int = 5) -> dict[str, object]:
+    return _history_driver_trends_payload(driver_code, window)
 
 
 @app.get("/api/history/trends/teams/{team_name}")
-def history_team_trends(team_name: str) -> dict[str, object]:
-    return _history_team_trends_payload(team_name)
+def history_team_trends(team_name: str, window: int = 5) -> dict[str, object]:
+    return _history_team_trends_payload(team_name, window)
 
 
 @app.get("/api/history/ratings/drivers/{driver_code}")

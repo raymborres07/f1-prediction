@@ -48,6 +48,8 @@ const compareDriverBEl = document.querySelector("#compare-driver-b");
 const compareDriversButton = document.querySelector("#compare-drivers");
 const driverCompareSummaryEl = document.querySelector("#driver-compare-summary");
 const driverRatingSummaryEl = document.querySelector("#driver-rating-summary");
+const driverTrendChartsEl = document.querySelector("#driver-trend-charts");
+const driverSplitSummaryEl = document.querySelector("#driver-split-summary");
 
 let countdownTimer = null;
 let activeMode = "basic";
@@ -897,12 +899,22 @@ async function loadDriverCompare() {
   const driverB = (compareDriverBEl.value || "RUS").trim().toUpperCase();
   driverCompareSummaryEl.textContent = "Loading comparison...";
   driverRatingSummaryEl.textContent = "Loading ratings...";
-  const response = await fetch(`/api/history/compare/drivers/${encodeURIComponent(driverA)}/${encodeURIComponent(driverB)}`);
-  const payload = await response.json();
-  renderDriverCompare(payload);
+  driverTrendChartsEl.textContent = "Loading trends...";
+  driverSplitSummaryEl.textContent = "Loading splits...";
+  const [summaryResponse, trendResponse, splitResponse] = await Promise.all([
+    fetch(`/api/history/compare/drivers/${encodeURIComponent(driverA)}/${encodeURIComponent(driverB)}`),
+    fetch(`/api/history/compare/drivers/${encodeURIComponent(driverA)}/${encodeURIComponent(driverB)}/trends?window=5`),
+    fetch(`/api/history/compare/drivers/${encodeURIComponent(driverA)}/${encodeURIComponent(driverB)}/splits`),
+  ]);
+  const [summary, trends, splits] = await Promise.all([
+    summaryResponse.json(),
+    trendResponse.json(),
+    splitResponse.json(),
+  ]);
+  renderDriverCompare(summary, trends, splits);
 }
 
-function renderDriverCompare(payload) {
+function renderDriverCompare(payload, trends = {}, splits = {}) {
   const drivers = payload.drivers ?? [];
   const comparison = payload.comparison ?? [];
   const driverA = drivers[0]?.driver_code ?? "A";
@@ -920,6 +932,100 @@ function renderDriverCompare(payload) {
     `)
     .join("");
   renderDriverRatings(payload.ratings ?? {});
+  renderDriverTrendCharts(trends);
+  renderDriverSplits(splits);
+}
+
+function renderDriverTrendCharts(payload) {
+  const drivers = payload.drivers ?? Object.keys(payload.series ?? {});
+  const series = payload.series ?? {};
+  const charts = payload.charts ?? [];
+  if (!drivers.length || !charts.length) {
+    driverTrendChartsEl.innerHTML = `<article class="trend-card"><h3>Trend charts</h3><p>Trend data unavailable for this pairing.</p></article>`;
+    return;
+  }
+  driverTrendChartsEl.innerHTML = charts
+    .map((chart) => trendChart(chart.label, chart.key, series, drivers, chart.lower_is_better))
+    .join("");
+}
+
+function trendChart(label, key, series, drivers, lowerIsBetter = false) {
+  const values = drivers.flatMap((driver) => (series[driver] ?? []).map((row) => Number(row[key])).filter(Number.isFinite));
+  if (!values.length) {
+    return `<article class="trend-card"><h3>${label}</h3><p>TBD until stronger evidence is generated.</p></article>`;
+  }
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(0.1, max - min);
+  const width = 320;
+  const height = 130;
+  const padding = 16;
+  const polylines = drivers.map((driver, index) => {
+    const rows = (series[driver] ?? []).filter((row) => Number.isFinite(Number(row[key])));
+    const points = rows.map((row, pointIndex) => {
+      const x = padding + (pointIndex / Math.max(1, rows.length - 1)) * (width - padding * 2);
+      const normalized = (Number(row[key]) - min) / range;
+      const yValue = lowerIsBetter ? normalized : 1 - normalized;
+      const y = padding + yValue * (height - padding * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    return `<polyline points="${points.join(" ")}" class="trend-line driver-${index}" />`;
+  }).join("");
+  const latest = drivers
+    .map((driver) => {
+      const rows = (series[driver] ?? []).filter((row) => Number.isFinite(Number(row[key])));
+      const value = rows.length ? Number(rows[rows.length - 1][key]) : null;
+      return `<span><i class="legend-dot"></i>${driver}: ${value === null ? "TBD" : value.toFixed(2)}</span>`;
+    })
+    .join("");
+  return `
+    <article class="trend-card">
+      <div>
+        <h3>${label}</h3>
+        <p>${lowerIsBetter ? "Lower is better" : "Higher is better"} | window ${payloadWindowLabel(series)}</p>
+      </div>
+      <svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${label} chart">
+        <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" />
+        ${polylines}
+      </svg>
+      <div class="trend-legend">${latest}</div>
+    </article>
+  `;
+}
+
+function payloadWindowLabel(series) {
+  const firstSeries = Object.values(series)[0] ?? [];
+  return firstSeries.length ? "5-race" : "TBD";
+}
+
+function renderDriverSplits(payload) {
+  const drivers = payload.drivers ?? Object.keys(payload.track_type_splits ?? {});
+  const splits = payload.track_type_splits ?? {};
+  if (!drivers.length) {
+    driverSplitSummaryEl.innerHTML = `<div><span>Track splits</span><strong>TBD</strong></div>`;
+    return;
+  }
+  const cards = ["street", "permanent"].map((type) => {
+    const rows = drivers.map((driver) => {
+      const split = splits[driver]?.[type] ?? {};
+      const average = split.average_finish ?? null;
+      return `<small>${driver}: ${average === null || average === undefined ? "TBD" : `avg P${Number(average).toFixed(1)}`} (${split.starts ?? 0} starts)</small>`;
+    }).join("");
+    return `
+      <div>
+        <span>${type} circuits</span>
+        <strong>${type === "street" ? "Walls and low margin" : "Permanent-track form"}</strong>
+        ${rows}
+      </div>
+    `;
+  }).join("");
+  driverSplitSummaryEl.innerHTML = `
+    ${cards}
+    <div>
+      <span>Data depth</span>
+      <strong>Modern timing is richest from 2018 onward; OpenF1 depth starts in 2023.</strong>
+    </div>
+  `;
 }
 
 function renderDriverRatings(ratings) {

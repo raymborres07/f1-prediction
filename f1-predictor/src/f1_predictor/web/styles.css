@@ -908,6 +908,105 @@ tbody tr:hover {
   height: 6px;
 }
 
+.trend-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.trend-card {
+  background: #0d121b;
+  border: 1px solid #263244;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.trend-card h3 {
+  font-size: 16px;
+  margin-bottom: 2px;
+}
+
+.trend-card p {
+  color: #aab5c5;
+  font-size: 12px;
+  font-weight: 800;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.trend-chart {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 100% 50%, 25% 100%;
+  border-radius: 6px;
+  min-height: 130px;
+  width: 100%;
+}
+
+.trend-chart line {
+  stroke: rgba(255, 255, 255, 0.2);
+  stroke-width: 1;
+}
+
+.trend-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+.trend-line.driver-0 {
+  stroke: #e10600;
+}
+
+.trend-line.driver-1 {
+  stroke: #2dd4bf;
+}
+
+.trend-legend {
+  align-items: center;
+  color: #d7dee9;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.trend-legend span {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.legend-dot {
+  background: #e10600;
+  border-radius: 999px;
+  display: inline-block;
+  height: 9px;
+  width: 9px;
+}
+
+.trend-legend span:nth-child(2) .legend-dot {
+  background: #2dd4bf;
+}
+
+.split-grid {
+  margin-top: 14px;
+}
+
+.split-grid small {
+  color: #d7dee9;
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 5px;
+}
+
 .benchmark-card {
   background: #090d14;
   border: 1px solid #263244;
@@ -1003,7 +1102,10 @@ tbody tr:hover {
 
   .race-facts,
   .benchmark-score-grid,
+  .compare-layout,
   .panel-grid,
+  .rating-grid,
+  .trend-grid,
   .future-grid,
   .session-grid {
     grid-template-columns: 1fr;
