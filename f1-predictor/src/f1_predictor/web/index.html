@@ -508,9 +508,58 @@
       </section>
 
       <section class="history-section app-section product-section" data-product-section="what-if" hidden>
-        <p class="eyebrow">What-if Matchups</p>
-        <h2>Speculative comparisons</h2>
-        <p class="panel-copy">Cross-era matchups will be clearly labeled as speculative simulations, not the same type of model as the race forecast.</p>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">What-if Matchups</p>
+            <h2>Evidence-based driver simulator</h2>
+          </div>
+          <div class="history-controls">
+            <label>
+              Driver A
+              <input id="whatif-driver-a" value="ANT" maxlength="4" />
+            </label>
+            <label>
+              Driver B
+              <input id="whatif-driver-b" value="VER" maxlength="4" />
+            </label>
+            <label>
+              Circuit
+              <input id="whatif-circuit" value="current" />
+            </label>
+            <label>
+              Session
+              <select id="whatif-session">
+                <option value="race">Race</option>
+                <option value="qualifying">Qualifying</option>
+              </select>
+            </label>
+            <label>
+              Condition
+              <select id="whatif-condition">
+                <option value="dry">Dry</option>
+                <option value="mixed">Mixed</option>
+                <option value="wet">Wet</option>
+              </select>
+            </label>
+            <button id="run-whatif" type="button">Run Matchup</button>
+          </div>
+        </div>
+        <p class="panel-copy" id="whatif-coverage">What-if outputs are simulated evidence projections, not factual predictions.</p>
+        <section class="whatif-hero panel" id="whatif-hero">Loading matchup simulator.</section>
+        <section class="history-layout profile-layout">
+          <div class="rating-grid compatibility-grid" id="whatif-dimensions"></div>
+          <div class="history-summary-grid" id="whatif-context"></div>
+        </section>
+        <section class="panel">
+          <div class="section-heading table-heading">
+            <div>
+              <p class="eyebrow">Uncertainty</p>
+              <h2>Why this is only a projection</h2>
+            </div>
+            <div class="compare-shortcuts" id="whatif-links"></div>
+          </div>
+          <div class="history-context-grid split-grid" id="whatif-notes"></div>
+        </section>
       </section>
     </main>
 

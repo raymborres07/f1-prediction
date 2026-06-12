@@ -90,6 +90,18 @@ const compatibilityComponentsEl = document.querySelector("#compatibility-compone
 const compatibilityContextEl = document.querySelector("#compatibility-context");
 const compatibilityLinksEl = document.querySelector("#compatibility-links");
 const compatibilityNotesEl = document.querySelector("#compatibility-notes");
+const whatIfDriverAEl = document.querySelector("#whatif-driver-a");
+const whatIfDriverBEl = document.querySelector("#whatif-driver-b");
+const whatIfCircuitEl = document.querySelector("#whatif-circuit");
+const whatIfSessionEl = document.querySelector("#whatif-session");
+const whatIfConditionEl = document.querySelector("#whatif-condition");
+const runWhatIfButton = document.querySelector("#run-whatif");
+const whatIfCoverageEl = document.querySelector("#whatif-coverage");
+const whatIfHeroEl = document.querySelector("#whatif-hero");
+const whatIfDimensionsEl = document.querySelector("#whatif-dimensions");
+const whatIfContextEl = document.querySelector("#whatif-context");
+const whatIfLinksEl = document.querySelector("#whatif-links");
+const whatIfNotesEl = document.querySelector("#whatif-notes");
 
 let countdownTimer = null;
 let activeMode = "basic";
@@ -106,6 +118,7 @@ let profileLoaded = false;
 let circuitLoaded = false;
 let teamProfileLoaded = false;
 let compatibilityLoaded = false;
+let whatIfLoaded = false;
 let selectedHistoryRace = null;
 
 const I18N = {
@@ -775,6 +788,9 @@ function setProductSection(section) {
   if (section === "lab" && !compatibilityLoaded) {
     loadCompatibility();
   }
+  if (section === "what-if" && !whatIfLoaded) {
+    loadWhatIfMatchup();
+  }
 }
 
 async function loadHistory() {
@@ -1221,7 +1237,10 @@ function renderProfileCompareShortcuts(code, shortcuts) {
   const compareButtons = shortcuts.length
     ? shortcuts.map((teammate) => `<button type="button" data-compare-profile="${teammate}">Compare ${code} vs ${teammate}</button>`).join("")
     : `<span class="status">No teammate shortcut yet</span>`;
-  profileCompareShortcutsEl.innerHTML = `${labButtons}${compareButtons}`;
+  const whatIfButtons = shortcuts.length
+    ? shortcuts.map((teammate) => `<button type="button" data-open-whatif-a="${code}" data-open-whatif-b="${teammate}">What-if vs ${teammate}</button>`).join("")
+    : "";
+  profileCompareShortcutsEl.innerHTML = `${labButtons}${whatIfButtons}${compareButtons}`;
 }
 
 async function loadCircuitProfile(key = null) {
@@ -1507,6 +1526,104 @@ function renderCompatibilityNotes(payload) {
   `).join("");
 }
 
+async function loadWhatIfMatchup() {
+  whatIfLoaded = true;
+  const driverA = (whatIfDriverAEl.value || "ANT").trim().toUpperCase();
+  const driverB = (whatIfDriverBEl.value || "VER").trim().toUpperCase();
+  const circuit = whatIfCircuitEl.value || "current";
+  const session = whatIfSessionEl.value || "race";
+  const condition = whatIfConditionEl.value || "dry";
+  whatIfHeroEl.textContent = "Running simulated matchup...";
+  whatIfDimensionsEl.textContent = "Loading matchup evidence...";
+  const response = await fetch(
+    `/api/lab/what-if/driver-matchup?driver_a=${encodeURIComponent(driverA)}&driver_b=${encodeURIComponent(driverB)}&circuit=${encodeURIComponent(circuit)}&session_type=${encodeURIComponent(session)}&condition=${encodeURIComponent(condition)}`,
+  );
+  const payload = await response.json();
+  renderWhatIfMatchup(payload);
+}
+
+function renderWhatIfMatchup(payload) {
+  const matchup = payload.matchup ?? {};
+  const driverA = matchup.driver_a ?? {};
+  const driverB = matchup.driver_b ?? {};
+  const circuit = matchup.circuit ?? {};
+  const metadata = payload.metadata ?? {};
+  const coverage = metadata.coverage ?? {};
+  const edge = payload.matchup_edge;
+  whatIfCoverageEl.textContent = `${coverage.broad_results ?? "Broad result history"}; ${coverage.rich_session_detail ?? "rich modern detail when available"}.`;
+  whatIfHeroEl.innerHTML = `
+    <div>
+      <span class="profile-code">simulated matchup</span>
+      <h3>${driverA.code ?? "A"} vs ${driverB.code ?? "B"}</h3>
+      <p>${conditionLabel(matchup.condition)} ${conditionLabel(matchup.session_type)} at ${circuit.name ?? "selected circuit"}.</p>
+    </div>
+    <div class="profile-stat-grid">
+      <div><span>Projected edge</span><strong>${payload.winner_edge ?? "Toss-up"}</strong></div>
+      <div><span>Edge value</span><strong>${edge === null || edge === undefined ? "TBD" : `${Number(edge).toFixed(1)} pts`}</strong></div>
+      <div><span>Confidence</span><strong>${conditionLabel(payload.confidence)}</strong></div>
+      <div><span>Evidence fields</span><strong>${payload.evidence_count ?? 0}</strong></div>
+      <div><span>TBD fields</span><strong>${payload.tbd_count ?? 0}</strong></div>
+      <div><span>Track type</span><strong>${conditionLabel(circuit.track_type)}</strong></div>
+    </div>
+  `;
+  renderWhatIfDimensions(payload.dimensions ?? [], driverA.code ?? "A", driverB.code ?? "B");
+  renderWhatIfContext(payload);
+  renderWhatIfNotes(payload);
+}
+
+function renderWhatIfDimensions(dimensions, driverA, driverB) {
+  whatIfDimensionsEl.innerHTML = dimensions.length
+    ? dimensions.map((dimension) => whatIfDimensionCard(dimension, driverA, driverB)).join("")
+    : `<article class="rating-card"><h3>Matchup dimensions</h3><p>TBD</p></article>`;
+}
+
+function whatIfDimensionCard(dimension, driverA, driverB) {
+  const edge = dimension.edge === null || dimension.edge === undefined ? null : Number(dimension.edge);
+  const width = Number.isFinite(edge) ? Math.max(0, Math.min(100, 50 + edge / 2)) : 50;
+  const leader = !Number.isFinite(edge) ? "TBD" : edge > 0 ? driverA : edge < 0 ? driverB : "Even";
+  return `
+    <article class="rating-card compatibility-card">
+      <h3>${dimension.label ?? "Dimension"}</h3>
+      <div class="matchup-bar">
+        <span>${driverB}</span>
+        <i style="--edge:${width}%"></i>
+        <span>${driverA}</span>
+      </div>
+      <strong>${leader} ${Number.isFinite(edge) ? `+${Math.abs(edge).toFixed(1)}` : "TBD"}</strong>
+      <small>${driverA} ${dimension.driver_a_score ?? "TBD"} | ${driverB} ${dimension.driver_b_score ?? "TBD"} | weight ${dimension.weight ?? "TBD"}</small>
+      <p>${dimension.note ?? "Evidence note pending."}</p>
+    </article>
+  `;
+}
+
+function renderWhatIfContext(payload) {
+  const matchup = payload.matchup ?? {};
+  const driverA = matchup.driver_a ?? {};
+  const driverB = matchup.driver_b ?? {};
+  const circuit = matchup.circuit ?? {};
+  whatIfContextEl.innerHTML = `
+    <div><span>${driverA.code ?? "A"} starts</span><strong>${driverA.summary?.starts ?? 0}</strong></div>
+    <div><span>${driverB.code ?? "B"} starts</span><strong>${driverB.summary?.starts ?? 0}</strong></div>
+    <div><span>Circuit</span><strong>${circuit.name ?? "TBD"}</strong></div>
+    <div><span>Session</span><strong>${conditionLabel(matchup.session_type)}</strong></div>
+  `;
+}
+
+function renderWhatIfNotes(payload) {
+  const matchup = payload.matchup ?? {};
+  whatIfLinksEl.innerHTML = `
+    <button type="button" data-open-driver="${matchup.driver_a?.code ?? "ANT"}">${matchup.driver_a?.code ?? "A"} profile</button>
+    <button type="button" data-open-driver="${matchup.driver_b?.code ?? "VER"}">${matchup.driver_b?.code ?? "B"} profile</button>
+    <button type="button" data-open-circuit="${matchup.circuit?.name ?? "current"}">Circuit profile</button>
+  `;
+  whatIfNotesEl.innerHTML = (payload.uncertainty_notes ?? []).map((note) => `
+    <div>
+      <span>Simulator note</span>
+      <strong>${note}</strong>
+    </div>
+  `).join("");
+}
+
 function renderDriverRatings(ratings) {
   const entries = Object.entries(ratings);
   if (!entries.length) {
@@ -1657,6 +1774,14 @@ document.addEventListener("click", (event) => {
   setProductSection("lab");
   loadCompatibility(driver, team);
 });
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-open-whatif-a], [data-open-whatif-b]");
+  if (!button) return;
+  whatIfDriverAEl.value = button.dataset.openWhatifA || whatIfDriverAEl.value || "ANT";
+  whatIfDriverBEl.value = button.dataset.openWhatifB || whatIfDriverBEl.value || "VER";
+  setProductSection("what-if");
+  loadWhatIfMatchup();
+});
 profileCompareShortcutsEl.addEventListener("click", (event) => {
   const button = event.target.closest("[data-compare-profile]");
   if (!button) return;
@@ -1668,6 +1793,12 @@ profileCompareShortcutsEl.addEventListener("click", (event) => {
 runCompatibilityButton.addEventListener("click", () => loadCompatibility());
 compatDriverEl.addEventListener("change", () => loadCompatibility());
 compatTeamEl.addEventListener("change", () => loadCompatibility());
+runWhatIfButton.addEventListener("click", loadWhatIfMatchup);
+whatIfDriverAEl.addEventListener("change", loadWhatIfMatchup);
+whatIfDriverBEl.addEventListener("change", loadWhatIfMatchup);
+whatIfCircuitEl.addEventListener("change", loadWhatIfMatchup);
+whatIfSessionEl.addEventListener("change", loadWhatIfMatchup);
+whatIfConditionEl.addEventListener("change", loadWhatIfMatchup);
 languageSelect.addEventListener("change", () => {
   activeLanguage = languageSelect.value;
   localStorage.setItem("f1-language", activeLanguage);

@@ -2194,6 +2194,176 @@ def _lab_driver_team_compatibility_payload(driver_code: str, team_name: str) -> 
     }
 
 
+def _matchup_dimension(
+    key: str,
+    label: str,
+    a_value: object,
+    b_value: object,
+    weight: float,
+    note: str,
+) -> dict[str, object]:
+    a_score = _compat_value(a_value)
+    b_score = _compat_value(b_value)
+    if a_score is None or b_score is None:
+        return {
+            "key": key,
+            "label": label,
+            "driver_a_score": a_score,
+            "driver_b_score": b_score,
+            "edge": None,
+            "weight": weight,
+            "status": "TBD",
+            "note": note,
+        }
+    return {
+        "key": key,
+        "label": label,
+        "driver_a_score": round(float(a_score), 1),
+        "driver_b_score": round(float(b_score), 1),
+        "edge": round(float(a_score - b_score), 1),
+        "weight": weight,
+        "status": "evidence",
+        "note": note,
+    }
+
+
+def _condition_modifier(condition: str, ratings: dict[str, object]) -> float | None:
+    normalized = condition.lower()
+    if normalized == "wet":
+        return _compat_value(ratings.get("wet_weather"))
+    if normalized == "mixed":
+        wet = _compat_value(ratings.get("wet_weather"))
+        consistency = _compat_value(ratings.get("consistency"))
+        values = [value for value in [wet, consistency] if value is not None]
+        return round(float(pd.Series(values).mean()), 1) if values else None
+    return _compat_value(ratings.get("consistency"))
+
+
+def _lab_driver_matchup_payload(
+    driver_a: str,
+    driver_b: str,
+    circuit_key: str = "current",
+    session_type: str = "race",
+    condition: str = "dry",
+) -> dict[str, object]:
+    session = session_type.lower() if session_type.lower() in {"qualifying", "race"} else "race"
+    weather = condition.lower() if condition.lower() in {"dry", "mixed", "wet"} else "dry"
+    a = _history_driver_profile_payload(driver_a, window=5)
+    b = _history_driver_profile_payload(driver_b, window=5)
+    a_ratings = a.get("ratings", {})
+    b_ratings = b.get("ratings", {})
+    circuit = _history_current_circuit_profile_payload() if circuit_key == "current" else _history_circuit_profile_payload(circuit_key)
+    circuit_identity = circuit.get("identity", {})
+    track_type = circuit_identity.get("track_type")
+    a_recent = _rating_from_lower((a.get("recent_form") or {}).get("average_finish"), 2, 18)
+    b_recent = _rating_from_lower((b.get("recent_form") or {}).get("average_finish"), 2, 18)
+    dimensions = [
+        _matchup_dimension(
+            "qualifying_pace",
+            "Qualifying pace",
+            a_ratings.get("qualifying_pace"),
+            b_ratings.get("qualifying_pace"),
+            1.45 if session == "qualifying" else 0.9,
+            "One-lap evidence matters most in qualifying and still affects track position in races.",
+        ),
+        _matchup_dimension(
+            "race_pace",
+            "Race pace",
+            a_ratings.get("race_pace"),
+            b_ratings.get("race_pace"),
+            1.45 if session == "race" else 0.75,
+            "Race evidence is weighted more heavily for race matchups.",
+        ),
+        _matchup_dimension(
+            "recent_form",
+            "Recent form",
+            a_recent,
+            b_recent,
+            1.1,
+            "Recent finish form is included so the simulator reacts to current-era momentum.",
+        ),
+        _matchup_dimension(
+            "consistency",
+            "Consistency",
+            a_ratings.get("consistency"),
+            b_ratings.get("consistency"),
+            0.85,
+            "Consistency matters when the matchup is close or conditions are unstable.",
+        ),
+        _matchup_dimension(
+            "tyre_management",
+            "Tyre management",
+            a_ratings.get("tyre_management"),
+            b_ratings.get("tyre_management"),
+            0.95 if session == "race" else 0.35,
+            "Tyre evidence is mostly race-relevant and depends on rich stint data.",
+        ),
+        _matchup_dimension(
+            "condition_fit",
+            f"{weather.title()} condition fit",
+            _condition_modifier(weather, a_ratings),
+            _condition_modifier(weather, b_ratings),
+            1.15 if weather in {"mixed", "wet"} else 0.65,
+            "Dry uses consistency as a stability proxy; mixed/wet leans on weather evidence where available.",
+        ),
+        _matchup_dimension(
+            "circuit_fit",
+            "Circuit fit",
+            a_ratings.get("street_circuit") if track_type == "street" else a_ratings.get("race_pace"),
+            b_ratings.get("street_circuit") if track_type == "street" else b_ratings.get("race_pace"),
+            1.0,
+            f"Uses street-circuit evidence for street tracks; otherwise falls back to race pace for {circuit_identity.get('name', 'the selected circuit')}.",
+        ),
+    ]
+    usable = [dimension for dimension in dimensions if dimension.get("edge") is not None]
+    total_weight = sum(float(dimension.get("weight", 0)) for dimension in usable)
+    weighted_edge = (
+        sum(float(dimension["edge"]) * float(dimension.get("weight", 0)) for dimension in usable) / total_weight
+        if total_weight
+        else None
+    )
+    matchup_edge = round(float(weighted_edge), 1) if weighted_edge is not None else None
+    winner = None
+    if matchup_edge is not None:
+        if matchup_edge > 1.5:
+            winner = a.get("driver_code")
+        elif matchup_edge < -1.5:
+            winner = b.get("driver_code")
+        else:
+            winner = "Toss-up"
+    evidence_count = len(usable)
+    confidence = "low"
+    if evidence_count >= 6 and abs(matchup_edge or 0) >= 4:
+        confidence = "high"
+    elif evidence_count >= 4:
+        confidence = "medium"
+    uncertainty = [
+        "This is a simulated matchup, not a factual prediction.",
+        "Cross-era or sparse-history comparisons should be treated as lower confidence.",
+    ]
+    if len(dimensions) - evidence_count:
+        uncertainty.append("Some dimensions are TBD because the packaged history does not support them strongly enough.")
+    if weather in {"mixed", "wet"}:
+        uncertainty.append("Weather-conditioned evidence is limited until more session/weather tagging is packaged.")
+    return {
+        "matchup": {
+            "driver_a": {"code": a.get("driver_code"), "name": a.get("driver_name"), "summary": a.get("summary", {})},
+            "driver_b": {"code": b.get("driver_code"), "name": b.get("driver_name"), "summary": b.get("summary", {})},
+            "circuit": circuit_identity,
+            "session_type": session,
+            "condition": weather,
+        },
+        "winner_edge": winner,
+        "matchup_edge": matchup_edge,
+        "confidence": confidence,
+        "dimensions": dimensions,
+        "evidence_count": evidence_count,
+        "tbd_count": len(dimensions) - evidence_count,
+        "uncertainty_notes": uncertainty,
+        "metadata": _history_scope_metadata(),
+    }
+
+
 def _rating_from_lower(value: object, best: float, worst: float) -> float | None:
     number = pd.to_numeric(value, errors="coerce")
     if pd.isna(number):
@@ -2378,6 +2548,17 @@ def history_team_profile(team_name: str, window: int = 5) -> dict[str, object]:
 @app.get("/api/lab/compatibility/driver-team")
 def lab_driver_team_compatibility(driver_code: str = "ANT", team_name: str = "Mercedes") -> dict[str, object]:
     return _lab_driver_team_compatibility_payload(driver_code, team_name)
+
+
+@app.get("/api/lab/what-if/driver-matchup")
+def lab_driver_matchup(
+    driver_a: str = "ANT",
+    driver_b: str = "VER",
+    circuit: str = "current",
+    session_type: str = "race",
+    condition: str = "dry",
+) -> dict[str, object]:
+    return _lab_driver_matchup_payload(driver_a, driver_b, circuit, session_type, condition)
 
 
 @app.get("/api/history/compare/drivers/{driver_a}/{driver_b}")
