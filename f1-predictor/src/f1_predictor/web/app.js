@@ -71,6 +71,16 @@ const circuitTyreSummaryEl = document.querySelector("#circuit-tyre-summary");
 const circuitRecentSummaryEl = document.querySelector("#circuit-recent-summary");
 const circuitRaceLogTitleEl = document.querySelector("#circuit-race-log-title");
 const circuitRaceLogEl = document.querySelector("#circuit-race-log");
+const teamProfileKeyEl = document.querySelector("#team-profile-key");
+const loadTeamProfileButton = document.querySelector("#load-team-profile");
+const teamProfileCoverageEl = document.querySelector("#team-profile-coverage");
+const teamProfileHeroEl = document.querySelector("#team-profile-hero");
+const teamTrendChartsEl = document.querySelector("#team-trend-charts");
+const teamLineupBalanceEl = document.querySelector("#team-lineup-balance");
+const teamCircuitStrengthsEl = document.querySelector("#team-circuit-strengths");
+const teamLineupHistoryEl = document.querySelector("#team-lineup-history");
+const teamRaceLogTitleEl = document.querySelector("#team-race-log-title");
+const teamRaceLogEl = document.querySelector("#team-race-log");
 
 let countdownTimer = null;
 let activeMode = "basic";
@@ -85,6 +95,7 @@ let statesPayload = null;
 let historyLoaded = false;
 let profileLoaded = false;
 let circuitLoaded = false;
+let teamProfileLoaded = false;
 let selectedHistoryRace = null;
 
 const I18N = {
@@ -100,6 +111,7 @@ const I18N = {
     history: "History",
     circuit_profiles: "Circuit Profiles",
     driver_ratings: "Driver Profiles",
+    team_profiles: "Team Profiles",
     compatibility_lab: "Compatibility Lab",
     what_if: "What-If Matchups",
     sunny: "Sunny",
@@ -126,6 +138,7 @@ const I18N = {
     history: "Historia",
     circuit_profiles: "Circuitos",
     driver_ratings: "Pilotos",
+    team_profiles: "Equipos",
     compatibility_lab: "Laboratorio",
     what_if: "Comparaciones",
     sunny: "Soleado",
@@ -221,6 +234,11 @@ function circuitKey(value) {
     ? value
     : value.circuit || value.location || value.event_name || "current";
   return String(source);
+}
+
+function teamProfileButton(team) {
+  if (!team) return "TBD";
+  return `<button class="inline-link" type="button" data-open-team="${String(team).replace(/"/g, "&quot;")}">${team}</button>`;
 }
 
 function renderRace(race) {
@@ -458,7 +476,7 @@ function renderRaceTable(predictions, target, limit = 5, geek = false) {
         return `
           <tr>
             <td><span class="driver">${row.driver_code}</span><br><span class="muted">${row.driver_name ?? ""}</span></td>
-            <td>${row.constructor_name ?? ""}</td>
+            <td>${teamProfileButton(row.constructor_name)}</td>
             <td>${grid}</td>
             <td class="probability">${pct(row.win_probability)}</td>
             <td class="probability">${pct(row.podium_probability)}</td>
@@ -474,7 +492,7 @@ function renderRaceTable(predictions, target, limit = 5, geek = false) {
         <tr>
           <td>${rankCell(row.prediction_rank, row.delta_rank)}</td>
           <td>${driverCell(row)}</td>
-          <td>${row.constructor_name ?? ""}</td>
+          <td>${teamProfileButton(row.constructor_name)}</td>
           <td>${probabilityCell(row.win_probability, row.delta_win_probability)}</td>
           <td>${probabilityCell(row.podium_probability, row.delta_podium_probability)}</td>
           <td>${probabilityCell(row.top10_probability, row.delta_top10_probability)}</td>
@@ -506,7 +524,7 @@ function renderQualifyingTable(predictions) {
       <tr>
         <td>P${row.qualifying_rank}</td>
         <td>${driverCell(row)}</td>
-        <td>${row.constructor_name ?? ""}</td>
+        <td>${teamProfileButton(row.constructor_name)}</td>
         <td>${probabilityCell(row.pole_probability)}</td>
         <td>${probabilityCell(row.front_row_probability)}</td>
         <td>${row.practice_adjusted_pace_rank ? `P${row.practice_adjusted_pace_rank}` : "TBD"}</td>
@@ -741,6 +759,9 @@ function setProductSection(section) {
   if (section === "driver-ratings" && !profileLoaded) {
     loadDriverProfile();
   }
+  if (section === "teams" && !teamProfileLoaded) {
+    loadTeamProfile();
+  }
 }
 
 async function loadHistory() {
@@ -848,7 +869,7 @@ function renderHistoryRace(payload) {
       <tr>
         <td>P${fixed(row.finish_position, 0)}</td>
         <td>${driverCell(row)}</td>
-        <td>${row.constructor_name ?? ""}</td>
+        <td>${teamProfileButton(row.constructor_name)}</td>
         <td>${row.grid_position ? `P${fixed(row.grid_position, 0)}` : "TBD"}</td>
         <td>${fixed(row.points, 1)}</td>
       </tr>
@@ -1093,7 +1114,7 @@ function renderDriverProfile(payload) {
     <div>
       <span class="profile-code">${code}</span>
       <h3>${payload.driver_name ?? code}</h3>
-      <p>${(summary.teams ?? []).join(" / ") || "Team history TBD"}</p>
+      <p>${(summary.teams ?? []).map((team) => teamProfileButton(team)).join(" / ") || "Team history TBD"}</p>
     </div>
     <div class="profile-stat-grid">
       <div><span>Starts</span><strong>${summary.starts ?? 0}</strong></div>
@@ -1173,7 +1194,7 @@ function renderProfileRaceLog(payload) {
     <tr>
       <td>${row.year ?? ""}</td>
       <td>${row.event_name ?? `Round ${row.round ?? ""}`}</td>
-      <td>${row.constructor_name ?? ""}</td>
+      <td>${teamProfileButton(row.constructor_name)}</td>
       <td>${row.grid_position ? `P${fixed(row.grid_position, 0)}` : "TBD"}</td>
       <td>${row.finish_position ? `P${fixed(row.finish_position, 0)}` : "TBD"}</td>
       <td>${fixed(row.points, 1)}</td>
@@ -1234,7 +1255,7 @@ function renderCircuitProfile(payload) {
     <div><span>Wins leader</span><strong>${leaderText(leaders.winners)}</strong></div>
     <div><span>Podium leader</span><strong>${leaderText(leaders.podiums)}</strong></div>
     <div><span>Pole leader</span><strong>${leaderText(leaders.poles)}</strong></div>
-    <div><span>Team wins</span><strong>${leaderText(leaders.teams)}</strong></div>
+    <div><span>Team wins</span><strong>${leaders.teams?.code ? `${teamProfileButton(leaders.teams.code)} (${leaders.teams.count ?? 0})` : "TBD"}</strong></div>
   `;
   renderCircuitTyres(payload.tyre_summary ?? []);
   renderCircuitRecent(payload.recent_races ?? []);
@@ -1275,6 +1296,109 @@ function renderCircuitRecent(rows) {
       <td>${fixed(row.average_grid_to_finish_change, 1)}</td>
     </tr>
   `).join("") || `<tr><td colspan="6">No circuit race log available.</td></tr>`;
+}
+
+async function loadTeamProfile(team = null) {
+  teamProfileLoaded = true;
+  const requested = team || teamProfileKeyEl.value || historyTeamEl.value || "Mercedes";
+  teamProfileKeyEl.value = requested;
+  teamProfileHeroEl.textContent = "Loading team profile...";
+  teamTrendChartsEl.textContent = "Loading team trends...";
+  const response = await fetch(`/api/history/profiles/teams/${encodeURIComponent(requested)}?window=5`);
+  const payload = await response.json();
+  renderTeamProfile(payload);
+}
+
+function renderTeamProfile(payload) {
+  const team = payload.team_name ?? teamProfileKeyEl.value ?? "Team";
+  const summary = payload.summary ?? {};
+  const metadata = payload.metadata ?? {};
+  const coverage = metadata.coverage ?? {};
+  teamProfileKeyEl.value = team;
+  teamProfileCoverageEl.textContent = `${coverage.broad_results ?? "Broad result history"}; ${coverage.rich_session_detail ?? "rich modern detail when available"}.`;
+  teamProfileHeroEl.innerHTML = `
+    <div>
+      <span class="profile-code">constructor</span>
+      <h3>${team}</h3>
+      <p>${(summary.drivers ?? []).slice(0, 6).join(" / ") || "Lineup history TBD"}</p>
+    </div>
+    <div class="profile-stat-grid">
+      <div><span>Entries</span><strong>${summary.entries ?? 0}</strong></div>
+      <div><span>Wins</span><strong>${summary.wins ?? 0}</strong></div>
+      <div><span>Podiums</span><strong>${summary.podiums ?? 0}</strong></div>
+      <div><span>Points</span><strong>${fixed(summary.points, 1)}</strong></div>
+      <div><span>Avg finish</span><strong>P${fixed(summary.average_finish, 1)}</strong></div>
+      <div><span>Latest season</span><strong>${payload.latest_season ?? "TBD"}</strong></div>
+    </div>
+  `;
+  renderTeamTrends(payload);
+  renderTeamLineupBalance(payload.current_lineup ?? []);
+  renderTeamCircuitStrengths(payload.circuit_strengths ?? []);
+  renderTeamLineupHistory(payload.lineup_history ?? []);
+  renderTeamRaceLog(payload);
+}
+
+function renderTeamTrends(payload) {
+  const team = payload.team_name ?? "Team";
+  const charts = [
+    { key: "rolling_average_finish", label: "Rolling race finish", lower_is_better: true, points: payload.trend_points ?? [] },
+    { key: "points", label: "Race points", lower_is_better: false, points: payload.trend_points ?? [] },
+    { key: "rolling_average_qualifying", label: "Rolling qualifying", lower_is_better: true, points: payload.qualifying_trend ?? [] },
+    { key: "podiums_cumulative", label: "Podium accumulation", lower_is_better: false, points: payload.trend_points ?? [] },
+  ];
+  teamTrendChartsEl.innerHTML = charts
+    .map((chart) => trendChart(chart.label, chart.key, { [team]: chart.points }, [team], chart.lower_is_better))
+    .join("");
+}
+
+function renderTeamLineupBalance(rows) {
+  teamLineupBalanceEl.innerHTML = rows.length
+    ? rows.slice(0, 4).map((row) => `
+      <div>
+        <span>${row.driver_code ?? "Driver"}</span>
+        <strong>${fixed(row.points, 1)} pts | avg P${fixed(row.average_finish, 1)}</strong>
+        <small>${row.wins ?? 0} wins | ${row.podiums ?? 0} podiums | grid P${fixed(row.average_grid, 1)}</small>
+      </div>
+    `).join("")
+    : `<div><span>Lineup balance</span><strong>TBD</strong></div>`;
+}
+
+function renderTeamCircuitStrengths(rows) {
+  teamCircuitStrengthsEl.innerHTML = rows.length
+    ? rows.slice(0, 6).map((row) => `
+      <div>
+        <span>${row.circuit ?? "Circuit"}</span>
+        <strong>${row.wins ?? 0} wins | ${row.podiums ?? 0} podiums</strong>
+        <small>Avg finish P${fixed(row.average_finish, 1)} | ${fixed(row.points, 1)} pts</small>
+      </div>
+    `).join("")
+    : `<div><span>Circuit strengths</span><strong>TBD</strong></div>`;
+}
+
+function renderTeamLineupHistory(rows) {
+  teamLineupHistoryEl.innerHTML = rows.length
+    ? rows.slice(0, 4).map((row) => `
+      <div>
+        <span>${row.year ?? "Year"}</span>
+        <strong>${formatDriverCodes(row.drivers ?? [])}</strong>
+      </div>
+    `).join("")
+    : `<div><span>Lineup history</span><strong>TBD</strong></div>`;
+}
+
+function renderTeamRaceLog(payload) {
+  const rows = payload.race_log ?? [];
+  teamRaceLogTitleEl.textContent = `${payload.team_name ?? "Team"} race log`;
+  teamRaceLogEl.innerHTML = rows.map((row) => `
+    <tr>
+      <td>${row.year ?? ""}</td>
+      <td>${row.round ?? ""}</td>
+      <td>${row.driver_code ?? ""}</td>
+      <td>${row.grid_position ? `P${fixed(row.grid_position, 0)}` : "TBD"}</td>
+      <td>${row.finish_position ? `P${fixed(row.finish_position, 0)}` : "TBD"}</td>
+      <td>${fixed(row.points, 1)}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="6">No team race log available.</td></tr>`;
 }
 
 function renderDriverRatings(ratings) {
@@ -1394,12 +1518,21 @@ loadProfileButton.addEventListener("click", loadDriverProfile);
 profileDriverEl.addEventListener("change", loadDriverProfile);
 loadCircuitButton.addEventListener("click", () => loadCircuitProfile(circuitKeyEl.value));
 circuitKeyEl.addEventListener("change", () => loadCircuitProfile(circuitKeyEl.value));
+loadTeamProfileButton.addEventListener("click", () => loadTeamProfile(teamProfileKeyEl.value));
+teamProfileKeyEl.addEventListener("change", () => loadTeamProfile(teamProfileKeyEl.value));
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-open-circuit]");
   if (!button) return;
   circuitKeyEl.value = button.dataset.openCircuit;
   setProductSection("circuits");
   loadCircuitProfile(button.dataset.openCircuit);
+});
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-open-team]");
+  if (!button) return;
+  teamProfileKeyEl.value = button.dataset.openTeam;
+  setProductSection("teams");
+  loadTeamProfile(button.dataset.openTeam);
 });
 profileCompareShortcutsEl.addEventListener("click", (event) => {
   const button = event.target.closest("[data-compare-profile]");

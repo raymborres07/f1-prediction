@@ -45,6 +45,7 @@
         <button class="tab" type="button" data-section="history" data-i18n="history">History</button>
         <button class="tab" type="button" data-section="circuits" data-i18n="circuit_profiles">Circuit Profiles</button>
         <button class="tab" type="button" data-section="driver-ratings" data-i18n="driver_ratings">Driver Profiles</button>
+        <button class="tab" type="button" data-section="teams" data-i18n="team_profiles">Team Profiles</button>
         <button class="tab" type="button" data-section="lab" data-i18n="compatibility_lab">Compatibility Lab</button>
         <button class="tab" type="button" data-section="what-if" data-i18n="what_if">What-If Matchups</button>
       </nav>
@@ -413,6 +414,57 @@
               </thead>
               <tbody id="profile-race-log">
                 <tr><td colspan="6">Load a driver profile.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section class="history-section app-section product-section" data-product-section="teams" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Team Profiles</p>
+            <h2>Constructor form and lineup evidence</h2>
+          </div>
+          <div class="history-controls">
+            <label>
+              Team
+              <input id="team-profile-key" value="Mercedes" />
+            </label>
+            <button id="load-team-profile" type="button">Load Team</button>
+          </div>
+        </div>
+        <p class="panel-copy" id="team-profile-coverage">Team profiles use race results, qualifying tables, and rich modern context where generated.</p>
+        <section class="team-profile-hero panel" id="team-profile-hero">Loading team profile.</section>
+        <section class="history-layout profile-layout">
+          <div class="trend-grid profile-trends" id="team-trend-charts"></div>
+          <div class="history-summary-grid" id="team-lineup-balance"></div>
+        </section>
+        <section class="history-layout profile-layout">
+          <div class="history-context-grid split-grid" id="team-circuit-strengths"></div>
+          <div class="history-summary-grid" id="team-lineup-history"></div>
+        </section>
+        <section class="panel">
+          <div class="section-heading table-heading">
+            <div>
+              <p class="eyebrow">Team Race Log</p>
+              <h2 id="team-race-log-title">Constructor race log</h2>
+            </div>
+          </div>
+          <div class="table-wrap compact-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Year</th>
+                  <th>Round</th>
+                  <th>Driver</th>
+                  <th>Grid</th>
+                  <th>Finish</th>
+                  <th>Points</th>
+                </tr>
+              </thead>
+              <tbody id="team-race-log">
+                <tr><td colspan="6">Load a team profile.</td></tr>
               </tbody>
             </table>
           </div>

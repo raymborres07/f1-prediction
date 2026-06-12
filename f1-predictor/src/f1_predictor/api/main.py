@@ -1795,6 +1795,110 @@ def _history_team_trends_payload(team_name: str, window: int = 5) -> dict[str, o
     }
 
 
+def _history_team_profile_payload(team_name: str, window: int = 5) -> dict[str, object]:
+    team = _history_team_payload(team_name)
+    resolved = team.get("team_name", team_name)
+    rows = pd.DataFrame(team.get("results", []))
+    trends = _history_team_trends_payload(team_name, window)
+    if rows.empty:
+        return {
+            "team_name": resolved,
+            "summary": team.get("summary", {}),
+            "trend_points": [],
+            "metadata": _history_scope_metadata(),
+        }
+    rows["year"] = pd.to_numeric(rows.get("year"), errors="coerce")
+    rows["round"] = pd.to_numeric(rows.get("round"), errors="coerce")
+    rows["finish_position"] = pd.to_numeric(rows.get("finish_position"), errors="coerce")
+    rows["grid_position"] = pd.to_numeric(rows.get("grid_position"), errors="coerce")
+    rows["points_numeric"] = pd.to_numeric(rows.get("points"), errors="coerce").fillna(0) if "points" in rows else 0
+    latest_year = int(rows["year"].dropna().max()) if rows["year"].notna().any() else None
+    latest_rows = rows[rows["year"] == latest_year].copy() if latest_year else pd.DataFrame()
+    lineup = (
+        latest_rows.groupby("driver_code", dropna=True)
+        .agg(
+            starts=("round", "count"),
+            points=("points_numeric", "sum"),
+            average_finish=("finish_position", "mean"),
+            average_grid=("grid_position", "mean"),
+            wins=("finish_position", lambda s: int((s == 1).sum())),
+            podiums=("finish_position", lambda s: int((s <= 3).sum())),
+        )
+        .reset_index()
+        .sort_values("points", ascending=False)
+        if not latest_rows.empty and "driver_code" in latest_rows
+        else pd.DataFrame()
+    )
+    if not lineup.empty:
+        lineup["points"] = lineup["points"].round(2)
+        lineup["average_finish"] = lineup["average_finish"].round(2)
+        lineup["average_grid"] = lineup["average_grid"].round(2)
+
+    qualifying = _history_qualifying()
+    qualifying_trend: list[dict[str, object]] = []
+    if not qualifying.empty and {"constructor_name", "year", "round", "qualifying_position"}.issubset(qualifying.columns):
+        q = qualifying.copy()
+        q = q[q["constructor_name"].astype(str).str.lower().str.contains(str(team_name).lower(), regex=False)]
+        if not q.empty:
+            q["year"] = pd.to_numeric(q.get("year"), errors="coerce")
+            q["round"] = pd.to_numeric(q.get("round"), errors="coerce")
+            q["qualifying_position"] = pd.to_numeric(q.get("qualifying_position"), errors="coerce")
+            q_grouped = (
+                q.groupby(["year", "round"], dropna=True)
+                .agg(average_qualifying=("qualifying_position", "mean"), best_qualifying=("qualifying_position", "min"))
+                .reset_index()
+                .sort_values(["year", "round"])
+            )
+            q_grouped["rolling_average_qualifying"] = q_grouped["average_qualifying"].rolling(window=_bounded_trend_window(window), min_periods=1).mean()
+            qualifying_trend = _history_records(q_grouped)
+
+    events = _history_event_rows()
+    event_lookup = {}
+    if not events.empty:
+        event_lookup = {
+            (int(row["year"]), int(row["round"])): row
+            for _, row in events.iterrows()
+            if pd.notna(row.get("year")) and pd.notna(row.get("round"))
+        }
+    enriched = rows.copy()
+    enriched["circuit"] = enriched.apply(
+        lambda row: _circuit_label_from_event(event_lookup.get((int(row["year"]), int(row["round"])), {}))
+        if pd.notna(row.get("year")) and pd.notna(row.get("round"))
+        else "Circuit",
+        axis=1,
+    )
+    circuit_strengths = (
+        enriched.groupby("circuit", dropna=True)
+        .agg(
+            entries=("round", "count"),
+            wins=("finish_position", lambda s: int((s == 1).sum())),
+            podiums=("finish_position", lambda s: int((s <= 3).sum())),
+            average_finish=("finish_position", "mean"),
+            points=("points_numeric", "sum"),
+        )
+        .reset_index()
+        .sort_values(["wins", "podiums", "points"], ascending=[False, False, False])
+        .head(8)
+    )
+    if not circuit_strengths.empty:
+        circuit_strengths["average_finish"] = circuit_strengths["average_finish"].round(2)
+        circuit_strengths["points"] = circuit_strengths["points"].round(2)
+
+    return {
+        "team_name": resolved,
+        "summary": team.get("summary", {}),
+        "latest_season": latest_year,
+        "current_lineup": _history_records(lineup),
+        "season_summaries": team.get("season_summaries", []),
+        "lineup_history": team.get("lineup_history", []),
+        "trend_points": trends.get("trend_points", []),
+        "qualifying_trend": qualifying_trend,
+        "circuit_strengths": _history_records(circuit_strengths),
+        "race_log": team.get("results", [])[:60],
+        "metadata": _history_scope_metadata(),
+    }
+
+
 def _history_compare_drivers_payload(driver_a: str, driver_b: str) -> dict[str, object]:
     a = _history_driver_metric_summary(driver_a)
     b = _history_driver_metric_summary(driver_b)
@@ -2127,6 +2231,11 @@ def history_driver_profile(driver_code: str, window: int = 5) -> dict[str, objec
 @app.get("/api/history/teams/{team_name}")
 def history_team(team_name: str) -> dict[str, object]:
     return _history_team_payload(team_name)
+
+
+@app.get("/api/history/profiles/teams/{team_name}")
+def history_team_profile(team_name: str, window: int = 5) -> dict[str, object]:
+    return _history_team_profile_payload(team_name, window)
 
 
 @app.get("/api/history/compare/drivers/{driver_a}/{driver_b}")
