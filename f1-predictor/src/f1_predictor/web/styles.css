@@ -1077,6 +1077,50 @@ tbody tr:hover {
   min-height: 100%;
 }
 
+.circuit-profile-hero {
+  align-items: stretch;
+  background:
+    linear-gradient(135deg, rgba(225, 6, 0, 0.2), transparent 32%),
+    radial-gradient(circle at 82% 16%, rgba(45, 212, 191, 0.14), transparent 30%),
+    linear-gradient(180deg, #151b26, #090d14);
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 0.9fr 1.4fr;
+  margin-top: 14px;
+}
+
+.circuit-profile-hero h3 {
+  font-size: clamp(32px, 5vw, 64px);
+  letter-spacing: 0;
+  line-height: 0.98;
+}
+
+.circuit-profile-hero p {
+  color: #aab5c5;
+  font-weight: 800;
+  margin-top: 8px;
+}
+
+.compact-action {
+  margin-top: 12px;
+  min-height: 38px;
+  padding: 9px 12px;
+}
+
+.inline-link {
+  background: none;
+  border: 0;
+  color: #f5f7fb;
+  cursor: pointer;
+  font: inherit;
+  min-height: 0;
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: #e10600;
+  width: auto;
+}
+
 .compare-shortcuts {
   display: flex;
   flex-wrap: wrap;
@@ -1185,6 +1229,7 @@ tbody tr:hover {
   .race-facts,
   .benchmark-score-grid,
   .compare-layout,
+  .circuit-profile-hero,
   .driver-profile-hero,
   .panel-grid,
   .profile-layout,

@@ -1519,6 +1519,149 @@ def _history_track_type(row: pd.Series) -> str:
     return "street" if any(marker in text for marker in street_markers) else "permanent"
 
 
+def _circuit_slug(value: object) -> str:
+    text = str(value or "").lower()
+    return "".join(character if character.isalnum() else "-" for character in text).strip("-")
+
+
+def _circuit_tokens(value: object) -> set[str]:
+    stop = {"circuit", "grand", "prix", "de", "the", "autodromo", "international"}
+    return {token for token in _circuit_slug(value).split("-") if len(token) >= 4 and token not in stop}
+
+
+def _circuit_match_frame(circuit_key: str) -> pd.DataFrame:
+    events = _history_event_rows()
+    if events.empty:
+        return events
+    key = _circuit_slug(circuit_key)
+    frame = events.copy()
+    frame["circuit_identity"] = frame.apply(lambda row: row.get("location") or row.get("event_name"), axis=1)
+    frame["circuit_slug"] = frame["circuit_identity"].map(_circuit_slug)
+    frame["event_slug"] = frame.get("event_name", pd.Series(dtype=str)).map(_circuit_slug)
+    matched = frame[(frame["circuit_slug"] == key) | (frame["event_slug"] == key)]
+    if matched.empty:
+        matched = frame[frame["circuit_slug"].str.contains(key, regex=False, na=False) | frame["event_slug"].str.contains(key, regex=False, na=False)]
+    if matched.empty:
+        tokens = _circuit_tokens(circuit_key)
+        if tokens:
+            matched = frame[
+                frame.apply(
+                    lambda row: bool(tokens & (_circuit_tokens(row.get("circuit_identity")) | _circuit_tokens(row.get("event_name")))),
+                    axis=1,
+                )
+            ]
+    return matched.sort_values(["year", "round"], ascending=[False, False])
+
+
+def _circuit_label_from_event(event: pd.Series | dict[str, object]) -> str:
+    return str(event.get("location") or event.get("circuit") or event.get("event_name") or "Circuit")
+
+
+def _tendency_label(value: float | None, low: float, high: float, labels: tuple[str, str, str]) -> str:
+    if value is None or pd.isna(value):
+        return "TBD"
+    if value <= low:
+        return labels[0]
+    if value >= high:
+        return labels[2]
+    return labels[1]
+
+
+def _history_circuit_profile_payload(circuit_key: str) -> dict[str, object]:
+    events = _circuit_match_frame(circuit_key)
+    if events.empty:
+        return {"circuit_key": circuit_key, "summary": {}, "races": [], "metadata": _history_scope_metadata()}
+    latest = events.iloc[0]
+    rounds = {(int(row["year"]), int(row["round"])) for _, row in events.iterrows() if pd.notna(row.get("year")) and pd.notna(row.get("round"))}
+    race_rows: list[pd.DataFrame] = []
+    quali_rows: list[pd.DataFrame] = []
+    stints: list[dict[str, object]] = []
+    tyres: list[dict[str, object]] = []
+    weather: list[dict[str, object]] = []
+    race_cards: list[dict[str, object]] = []
+    for year, round_number in sorted(rounds, reverse=True):
+        race = _sort_by_numeric(_history_race_rows(year, round_number), "finish_position")
+        quali = _sort_by_numeric(_history_quali_rows(year, round_number), "qualifying_position")
+        if not race.empty:
+            race_rows.append(race)
+        if not quali.empty:
+            quali_rows.append(quali)
+        stint_summary = _history_stint_summary(year, round_number)
+        tyre_summary = _history_tyre_summary(year, round_number)
+        weather_summary = _history_weather_summary(year, round_number)
+        stints.extend(stint_summary)
+        tyres.extend(tyre_summary)
+        if weather_summary:
+            weather.append(weather_summary)
+        event = events[(events["year"] == year) & (events["round"] == round_number)].head(1)
+        race_cards.append(
+            {
+                "year": year,
+                "round": round_number,
+                "event_name": event.iloc[0].get("event_name") if not event.empty else f"Round {round_number}",
+                "winner": _driver_at_position(race, "finish_position", 1),
+                "pole": _driver_at_position(quali, "qualifying_position", 1),
+                "podium": race.head(3)["driver_code"].dropna().astype(str).tolist() if not race.empty and "driver_code" in race else [],
+                "average_grid_to_finish_change": _json_value(round(float((pd.to_numeric(race.get("grid_position"), errors="coerce") - pd.to_numeric(race.get("finish_position"), errors="coerce")).abs().dropna().mean()), 2)) if not race.empty and {"grid_position", "finish_position"}.issubset(race.columns) and (pd.to_numeric(race.get("grid_position"), errors="coerce") - pd.to_numeric(race.get("finish_position"), errors="coerce")).dropna().any() else None,
+            }
+        )
+    race_frame = pd.concat(race_rows, ignore_index=True) if race_rows else pd.DataFrame()
+    quali_frame = pd.concat(quali_rows, ignore_index=True) if quali_rows else pd.DataFrame()
+    pole_wins = 0
+    pole_races = 0
+    if not quali_frame.empty and not race_frame.empty:
+        for year, round_number in rounds:
+            pole = _driver_at_position(_history_quali_rows(year, round_number), "qualifying_position", 1)
+            winner = _driver_at_position(_history_race_rows(year, round_number), "finish_position", 1)
+            if pole:
+                pole_races += 1
+                pole_wins += int(pole == winner)
+    movement = None
+    if not race_frame.empty and {"grid_position", "finish_position"}.issubset(race_frame.columns):
+        grid = pd.to_numeric(race_frame.get("grid_position"), errors="coerce")
+        finish = pd.to_numeric(race_frame.get("finish_position"), errors="coerce")
+        delta = (grid - finish).abs().dropna()
+        movement = round(float(delta.mean()), 2) if not delta.empty else None
+    stint_df = pd.DataFrame(stints)
+    tyre_df = pd.DataFrame(tyres)
+    mean_stints = pd.to_numeric(stint_df.get("stints"), errors="coerce").dropna().mean() if not stint_df.empty and "stints" in stint_df else None
+    mean_stint_laps = pd.to_numeric(stint_df.get("mean_stint_laps"), errors="coerce").dropna().mean() if not stint_df.empty and "mean_stint_laps" in stint_df else None
+    return {
+        "circuit_key": _circuit_slug(_circuit_label_from_event(latest)),
+        "identity": {
+            "name": _circuit_label_from_event(latest),
+            "event_name": latest.get("event_name"),
+            "country": latest.get("country"),
+            "location": latest.get("location"),
+            "track_type": _history_track_type(latest),
+            "races_in_archive": len(rounds),
+        },
+        "summary": {
+            "pole_win_rate": round(pole_wins / pole_races, 3) if pole_races else None,
+            "average_grid_to_finish_change": movement,
+            "qualifying_importance": _tendency_label((pole_wins / pole_races) if pole_races else None, 0.25, 0.55, ("low", "medium", "high")),
+            "overtaking_difficulty": _tendency_label(movement, 3.5, 7.5, ("high", "medium", "low")),
+            "pit_stop_tendency": _tendency_label(float(mean_stints) if pd.notna(mean_stints) else None, 1.4, 2.2, ("low", "medium", "high")),
+            "tyre_wear_tendency": _tendency_label(float(mean_stint_laps) if pd.notna(mean_stint_laps) else None, 13, 22, ("high", "medium", "low")),
+            "safety_car_tendency": "TBD",
+        },
+        "leaders": {
+            "winners": _leader_record(race_frame[race_frame["finish_position"] == 1], "driver_code") if not race_frame.empty and "finish_position" in race_frame else None,
+            "podiums": _leader_record(race_frame[race_frame["finish_position"] <= 3], "driver_code") if not race_frame.empty and "finish_position" in race_frame else None,
+            "poles": _leader_record(quali_frame[quali_frame["qualifying_position"] == 1], "driver_code") if not quali_frame.empty and "qualifying_position" in quali_frame else None,
+            "teams": _leader_record(race_frame[race_frame["finish_position"] == 1], "constructor_name") if not race_frame.empty and "finish_position" in race_frame else None,
+        },
+        "recent_races": race_cards[:8],
+        "tyre_summary": _history_records(tyre_df.groupby("compound", dropna=True).agg(total_laps=("total_laps", "sum")).reset_index().sort_values("total_laps", ascending=False)) if not tyre_df.empty and {"compound", "total_laps"}.issubset(tyre_df.columns) else [],
+        "weather_samples": weather[:5],
+        "metadata": _history_scope_metadata(),
+    }
+
+
+def _history_current_circuit_profile_payload() -> dict[str, object]:
+    return _history_circuit_profile_payload(BARCELONA_2026.get("circuit") or BARCELONA_2026.get("event_name"))
+
+
 def _bounded_trend_window(window: int) -> int:
     return max(2, min(int(window or 5), 10))
 
@@ -1959,6 +2102,16 @@ def history_qualifying(year: int, round_number: int) -> dict[str, object]:
 @app.get("/api/history/{year}/{round_number}/laps")
 def history_laps(year: int, round_number: int, limit: int = 250) -> dict[str, object]:
     return _history_laps_payload(year, round_number, limit=max(1, min(limit, 1000)))
+
+
+@app.get("/api/history/circuits/current")
+def history_current_circuit_profile() -> dict[str, object]:
+    return _history_current_circuit_profile_payload()
+
+
+@app.get("/api/history/circuits/{circuit_key}")
+def history_circuit_profile(circuit_key: str) -> dict[str, object]:
+    return _history_circuit_profile_payload(circuit_key)
 
 
 @app.get("/api/history/drivers/{driver_code}")

@@ -43,6 +43,7 @@
         <button class="tab active" type="button" data-section="race-hub" data-i18n="race_hub">Race Hub</button>
         <button class="tab" type="button" data-section="live-race" data-i18n="live_race">Live Race</button>
         <button class="tab" type="button" data-section="history" data-i18n="history">History</button>
+        <button class="tab" type="button" data-section="circuits" data-i18n="circuit_profiles">Circuit Profiles</button>
         <button class="tab" type="button" data-section="driver-ratings" data-i18n="driver_ratings">Driver Profiles</button>
         <button class="tab" type="button" data-section="lab" data-i18n="compatibility_lab">Compatibility Lab</button>
         <button class="tab" type="button" data-section="what-if" data-i18n="what_if">What-If Matchups</button>
@@ -313,6 +314,57 @@
         <p class="eyebrow">Live Race</p>
         <h2>Live race mode</h2>
         <p class="panel-copy">Lap-by-lap win probability, safety-car state, tyre state, and live leaderboard views will live here once live timing is connected.</p>
+      </section>
+
+      <section class="history-section app-section product-section" data-product-section="circuits" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Circuit Profiles</p>
+            <h2>Track context and historical behavior</h2>
+          </div>
+          <div class="history-controls">
+            <label>
+              Circuit
+              <input id="circuit-key" value="Circuit de Barcelona-Catalunya" />
+            </label>
+            <button id="load-circuit" type="button">Load Circuit</button>
+          </div>
+        </div>
+        <p class="panel-copy" id="circuit-coverage">Circuit profiles connect historical race patterns to forecast context.</p>
+        <section class="circuit-profile-hero panel" id="circuit-profile-hero">Loading circuit profile.</section>
+        <section class="history-layout profile-layout">
+          <div class="history-summary-grid" id="circuit-behavior-summary"></div>
+          <div class="history-summary-grid" id="circuit-leader-summary"></div>
+        </section>
+        <section class="history-layout profile-layout">
+          <div class="history-context-grid split-grid" id="circuit-tyre-summary"></div>
+          <div class="history-context-grid split-grid" id="circuit-recent-summary"></div>
+        </section>
+        <section class="panel">
+          <div class="section-heading table-heading">
+            <div>
+              <p class="eyebrow">Recent Races</p>
+              <h2 id="circuit-race-log-title">Circuit race log</h2>
+            </div>
+          </div>
+          <div class="table-wrap compact-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Year</th>
+                  <th>Race</th>
+                  <th>Pole</th>
+                  <th>Winner</th>
+                  <th>Podium</th>
+                  <th>Movement</th>
+                </tr>
+              </thead>
+              <tbody id="circuit-race-log">
+                <tr><td colspan="6">Load a circuit profile.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
       <section class="history-section app-section product-section" data-product-section="driver-ratings" hidden>

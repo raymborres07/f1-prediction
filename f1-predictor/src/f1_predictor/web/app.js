@@ -61,6 +61,16 @@ const profileTeammateSummaryEl = document.querySelector("#profile-teammate-summa
 const profileCompareShortcutsEl = document.querySelector("#profile-compare-shortcuts");
 const profileRaceLogTitleEl = document.querySelector("#profile-race-log-title");
 const profileRaceLogEl = document.querySelector("#profile-race-log");
+const circuitKeyEl = document.querySelector("#circuit-key");
+const loadCircuitButton = document.querySelector("#load-circuit");
+const circuitCoverageEl = document.querySelector("#circuit-coverage");
+const circuitHeroEl = document.querySelector("#circuit-profile-hero");
+const circuitBehaviorSummaryEl = document.querySelector("#circuit-behavior-summary");
+const circuitLeaderSummaryEl = document.querySelector("#circuit-leader-summary");
+const circuitTyreSummaryEl = document.querySelector("#circuit-tyre-summary");
+const circuitRecentSummaryEl = document.querySelector("#circuit-recent-summary");
+const circuitRaceLogTitleEl = document.querySelector("#circuit-race-log-title");
+const circuitRaceLogEl = document.querySelector("#circuit-race-log");
 
 let countdownTimer = null;
 let activeMode = "basic";
@@ -74,6 +84,7 @@ let weekendPayload = null;
 let statesPayload = null;
 let historyLoaded = false;
 let profileLoaded = false;
+let circuitLoaded = false;
 let selectedHistoryRace = null;
 
 const I18N = {
@@ -87,6 +98,7 @@ const I18N = {
     race_hub: "Race Hub",
     live_race: "Live Race",
     history: "History",
+    circuit_profiles: "Circuit Profiles",
     driver_ratings: "Driver Profiles",
     compatibility_lab: "Compatibility Lab",
     what_if: "What-If Matchups",
@@ -112,6 +124,7 @@ const I18N = {
     race_hub: "Carrera",
     live_race: "En vivo",
     history: "Historia",
+    circuit_profiles: "Circuitos",
     driver_ratings: "Pilotos",
     compatibility_lab: "Laboratorio",
     what_if: "Comparaciones",
@@ -202,12 +215,21 @@ function fixed(value, decimals = 1) {
   return Number.isFinite(number) ? number.toFixed(decimals) : "TBD";
 }
 
+function circuitKey(value) {
+  if (!value) return "current";
+  const source = typeof value === "string"
+    ? value
+    : value.circuit || value.location || value.event_name || "current";
+  return String(source);
+}
+
 function renderRace(race) {
   raceEl.innerHTML = `
     <div>
       <span class="label">Next Race</span>
       <h2>${race.event_name ?? `Round ${race.round}`}</h2>
       <p>${race.country ?? "Location TBD"} - ${race.location ?? "Circuit TBD"}</p>
+      <button class="secondary compact-action" type="button" data-open-circuit="${circuitKey(race)}">Circuit profile</button>
     </div>
     <dl class="race-facts">
       <div><dt>Circuit</dt><dd>${race.circuit ?? race.location ?? "TBD"}</dd></div>
@@ -713,6 +735,9 @@ function setProductSection(section) {
   if (section === "history" && !historyLoaded) {
     loadHistory();
   }
+  if (section === "circuits" && !circuitLoaded) {
+    loadCircuitProfile();
+  }
   if (section === "driver-ratings" && !profileLoaded) {
     loadDriverProfile();
   }
@@ -815,6 +840,7 @@ function renderHistoryRace(payload) {
     <div><span>Avg track</span><strong>${temp(weather.average_track_temp_c, 1)}</strong></div>
     <div><span>Rain samples</span><strong>${weather.rain_samples ?? 0}</strong></div>
     <div><span>Wind</span><strong>${speed(weather.average_wind_kph, 1)}</strong></div>
+    <div><span>Circuit</span><strong><button class="inline-link" type="button" data-open-circuit="${circuitKey(event)}">${event.location ?? event.event_name ?? "Open profile"}</button></strong></div>
   `;
   renderHistoryGeekContext(payload);
   historyResultsEl.innerHTML = (payload.race_results ?? [])
@@ -1161,6 +1187,96 @@ function renderProfileCompareShortcuts(code, shortcuts) {
     : `<span class="status">No teammate shortcut yet</span>`;
 }
 
+async function loadCircuitProfile(key = null) {
+  circuitLoaded = true;
+  const requested = key || circuitKeyEl.value || "current";
+  circuitKeyEl.value = requested === "current" ? circuitKeyEl.value : requested;
+  circuitHeroEl.textContent = "Loading circuit profile...";
+  circuitBehaviorSummaryEl.textContent = "Loading behavior...";
+  const url = requested === "current"
+    ? "/api/history/circuits/current"
+    : `/api/history/circuits/${encodeURIComponent(requested)}`;
+  const response = await fetch(url);
+  const payload = await response.json();
+  renderCircuitProfile(payload);
+}
+
+function renderCircuitProfile(payload) {
+  const identity = payload.identity ?? {};
+  const summary = payload.summary ?? {};
+  const leaders = payload.leaders ?? {};
+  const metadata = payload.metadata ?? {};
+  const coverage = metadata.coverage ?? {};
+  circuitKeyEl.value = identity.name ?? payload.circuit_key ?? circuitKeyEl.value;
+  circuitCoverageEl.textContent = `${coverage.broad_results ?? "Broad result history"}; ${coverage.rich_session_detail ?? "rich modern timing detail when generated"}.`;
+  circuitHeroEl.innerHTML = `
+    <div>
+      <span class="profile-code">${identity.track_type ?? "circuit"}</span>
+      <h3>${identity.name ?? "Circuit profile"}</h3>
+      <p>${identity.event_name ?? "Grand Prix history"} | ${identity.country ?? "Location TBD"}</p>
+    </div>
+    <div class="profile-stat-grid">
+      <div><span>Archive races</span><strong>${identity.races_in_archive ?? 0}</strong></div>
+      <div><span>Quali importance</span><strong>${conditionLabel(summary.qualifying_importance)}</strong></div>
+      <div><span>Overtaking</span><strong>${conditionLabel(summary.overtaking_difficulty)}</strong></div>
+      <div><span>Pit tendency</span><strong>${conditionLabel(summary.pit_stop_tendency)}</strong></div>
+      <div><span>Tyre wear</span><strong>${conditionLabel(summary.tyre_wear_tendency)}</strong></div>
+      <div><span>Safety car</span><strong>${conditionLabel(summary.safety_car_tendency)}</strong></div>
+    </div>
+  `;
+  circuitBehaviorSummaryEl.innerHTML = `
+    <div><span>Pole win rate</span><strong>${summary.pole_win_rate === null || summary.pole_win_rate === undefined ? "TBD" : pct(summary.pole_win_rate)}</strong></div>
+    <div><span>Grid movement</span><strong>${fixed(summary.average_grid_to_finish_change, 1)} places</strong></div>
+    <div><span>Qualifying</span><strong>${conditionLabel(summary.qualifying_importance)}</strong></div>
+    <div><span>Overtaking difficulty</span><strong>${conditionLabel(summary.overtaking_difficulty)}</strong></div>
+  `;
+  circuitLeaderSummaryEl.innerHTML = `
+    <div><span>Wins leader</span><strong>${leaderText(leaders.winners)}</strong></div>
+    <div><span>Podium leader</span><strong>${leaderText(leaders.podiums)}</strong></div>
+    <div><span>Pole leader</span><strong>${leaderText(leaders.poles)}</strong></div>
+    <div><span>Team wins</span><strong>${leaderText(leaders.teams)}</strong></div>
+  `;
+  renderCircuitTyres(payload.tyre_summary ?? []);
+  renderCircuitRecent(payload.recent_races ?? []);
+}
+
+function conditionLabel(value) {
+  if (!value) return "TBD";
+  return String(value).replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function renderCircuitTyres(rows) {
+  circuitTyreSummaryEl.innerHTML = rows.length
+    ? rows.slice(0, 4).map((row) => `
+      <div>
+        <span>${row.compound ?? "Tyre"}</span>
+        <strong>${fixed(row.total_laps, 0)} laps in archive</strong>
+      </div>
+    `).join("")
+    : `<div><span>Tyres</span><strong>TBD until rich stint data is packaged.</strong></div>`;
+}
+
+function renderCircuitRecent(rows) {
+  circuitRecentSummaryEl.innerHTML = rows.slice(0, 4).map((row) => `
+    <div>
+      <span>${row.year} ${row.event_name ?? ""}</span>
+      <strong>Winner ${row.winner ?? "TBD"} | Pole ${row.pole ?? "TBD"}</strong>
+      <small>Movement ${fixed(row.average_grid_to_finish_change, 1)} places</small>
+    </div>
+  `).join("") || `<div><span>Recent races</span><strong>TBD</strong></div>`;
+  circuitRaceLogTitleEl.textContent = `${circuitKeyEl.value || "Circuit"} race log`;
+  circuitRaceLogEl.innerHTML = rows.map((row) => `
+    <tr>
+      <td>${row.year ?? ""}</td>
+      <td>${row.event_name ?? `Round ${row.round ?? ""}`}</td>
+      <td>${row.pole ?? "TBD"}</td>
+      <td>${row.winner ?? "TBD"}</td>
+      <td>${formatDriverCodes(row.podium ?? [])}</td>
+      <td>${fixed(row.average_grid_to_finish_change, 1)}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="6">No circuit race log available.</td></tr>`;
+}
+
 function renderDriverRatings(ratings) {
   const entries = Object.entries(ratings);
   if (!entries.length) {
@@ -1276,6 +1392,15 @@ historyTeamEl.addEventListener("change", loadHistoryTeam);
 compareDriversButton.addEventListener("click", loadDriverCompare);
 loadProfileButton.addEventListener("click", loadDriverProfile);
 profileDriverEl.addEventListener("change", loadDriverProfile);
+loadCircuitButton.addEventListener("click", () => loadCircuitProfile(circuitKeyEl.value));
+circuitKeyEl.addEventListener("change", () => loadCircuitProfile(circuitKeyEl.value));
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-open-circuit]");
+  if (!button) return;
+  circuitKeyEl.value = button.dataset.openCircuit;
+  setProductSection("circuits");
+  loadCircuitProfile(button.dataset.openCircuit);
+});
 profileCompareShortcutsEl.addEventListener("click", (event) => {
   const button = event.target.closest("[data-compare-profile]");
   if (!button) return;
