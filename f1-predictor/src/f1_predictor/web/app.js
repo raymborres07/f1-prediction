@@ -950,6 +950,10 @@ function formatDriverCodes(codes = []) {
 function setProductSection(section) {
   activeSection = section;
   productTabs.forEach((button) => button.classList.toggle("active", button.dataset.section === section));
+  document.querySelectorAll(".nav-group").forEach((group) => {
+    const isActive = Boolean(group.querySelector(`[data-section="${section}"]`));
+    group.classList.toggle("group-active", isActive);
+  });
   raceHubSections.forEach((node) => {
     node.hidden = section !== "race-hub";
   });

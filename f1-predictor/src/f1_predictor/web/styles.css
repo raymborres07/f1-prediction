@@ -162,6 +162,7 @@ body[data-mode="geek"] .basic-only {
 }
 
 .tabs {
+  align-items: stretch;
   flex-wrap: wrap;
   margin-bottom: 18px;
 }
@@ -173,7 +174,47 @@ body[data-mode="geek"] .basic-only {
   min-height: 36px;
 }
 
+.nav-group {
+  position: relative;
+}
+
+.nav-parent {
+  min-width: 92px;
+}
+
+.nav-menu {
+  background: #0d121b;
+  border: 1px solid #2b3545;
+  border-radius: 8px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34);
+  display: none;
+  gap: 6px;
+  left: 0;
+  min-width: 220px;
+  padding: 8px;
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 20;
+}
+
+.nav-group:hover .nav-menu,
+.nav-group:focus-within .nav-menu {
+  display: grid;
+}
+
+.nav-menu .tab {
+  justify-content: flex-start;
+  text-align: left;
+  width: 100%;
+}
+
 .tab.active {
+  background: #e10600;
+  border-color: #e10600;
+  color: #ffffff;
+}
+
+.nav-group.group-active > .nav-parent {
   background: #e10600;
   border-color: #e10600;
   color: #ffffff;
@@ -282,7 +323,7 @@ body[data-mode="geek"] .basic-only {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 14px;
+  margin-top: 12px;
 }
 
 .synthesis-grid article {
@@ -362,6 +403,123 @@ body[data-mode="geek"] .basic-only {
 .history-section {
   margin-bottom: 18px;
   padding: 18px;
+}
+
+.race-context-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr 1.4fr;
+  margin-bottom: 18px;
+}
+
+.race-context-grid > * {
+  min-width: 0;
+}
+
+.forecast-explainer {
+  align-self: start;
+}
+
+.forecast-explainer .basic-note {
+  margin: 12px 0 0;
+}
+
+.compact-rail,
+.methodology-panel,
+.insights-drawer {
+  background: rgba(17, 23, 34, 0.94);
+  border: 1px solid #2b3545;
+  border-radius: 8px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+  padding: 0;
+}
+
+.compact-rail summary,
+.methodology-panel summary,
+.insights-drawer summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  list-style: none;
+  padding: 16px;
+}
+
+.compact-rail summary::-webkit-details-marker,
+.methodology-panel summary::-webkit-details-marker,
+.insights-drawer summary::-webkit-details-marker {
+  display: none;
+}
+
+.compact-rail summary::after,
+.methodology-panel summary::after,
+.insights-drawer summary::after {
+  color: #ff312b;
+  content: "+";
+  font-size: 22px;
+  font-weight: 1000;
+}
+
+.compact-rail[open] summary::after,
+.methodology-panel[open] summary::after,
+.insights-drawer[open] summary::after {
+  content: "-";
+}
+
+.compact-rail b,
+.methodology-panel b,
+.insights-drawer b {
+  color: #f5f7fb;
+  display: block;
+  font-size: 17px;
+}
+
+.compact-rail small,
+.methodology-panel small,
+.insights-drawer small {
+  color: #aab5c5;
+  display: block;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.compact-rail .session-grid {
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  margin: 0;
+  padding: 0 16px 16px;
+}
+
+.compact-rail .session-card {
+  gap: 8px;
+  min-height: auto;
+  padding: 12px;
+}
+
+.compact-rail .weather-icon {
+  font-size: 28px;
+  height: 54px;
+  width: 54px;
+}
+
+.compact-rail .weather-stats,
+.compact-rail .forecast-strip,
+.compact-rail .session-card small {
+  display: none;
+}
+
+.compact-rail .session-main p {
+  font-size: 16px;
+}
+
+.methodology-panel .state-strip,
+.insights-drawer .synthesis-grid {
+  padding: 0 16px 16px;
+}
+
+.insights-drawer .synthesis-grid article {
+  background: transparent;
+  box-shadow: none;
 }
 
 .forecast-tabs {
@@ -1580,6 +1738,7 @@ tbody tr:hover {
   .panel-grid,
   .profile-layout,
   .profile-stat-grid,
+  .race-context-grid,
   .rating-grid,
   .compatibility-grid,
   .synthesis-grid,
@@ -1633,8 +1792,23 @@ tbody tr:hover {
     padding-bottom: 4px;
   }
 
+  .nav-group {
+    flex: 0 0 auto;
+  }
+
+  .nav-menu {
+    left: auto;
+    position: fixed;
+    right: 10px;
+    top: 112px;
+  }
+
   .tabs .tab {
     flex: 0 0 auto;
     width: auto;
+  }
+
+  .compact-rail .session-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -42,13 +42,28 @@
 
       <nav class="tabs" aria-label="Product sections">
         <button class="tab active" type="button" data-section="race-hub" data-i18n="race_hub">Race Hub</button>
-        <button class="tab" type="button" data-section="live-race" data-i18n="live_race">Live Race</button>
         <button class="tab" type="button" data-section="history" data-i18n="history">History</button>
-        <button class="tab" type="button" data-section="circuits" data-i18n="circuit_profiles">Circuit Profiles</button>
-        <button class="tab" type="button" data-section="driver-ratings" data-i18n="driver_ratings">Driver Profiles</button>
-        <button class="tab" type="button" data-section="teams" data-i18n="team_profiles">Team Profiles</button>
-        <button class="tab" type="button" data-section="lab" data-i18n="compatibility_lab">Compatibility Lab</button>
-        <button class="tab" type="button" data-section="what-if" data-i18n="what_if">What-If Matchups</button>
+        <div class="nav-group">
+          <button class="tab nav-parent" type="button">Profiles</button>
+          <div class="nav-menu">
+            <button class="tab" type="button" data-section="driver-ratings" data-i18n="driver_ratings">Driver Profiles</button>
+            <button class="tab" type="button" data-section="teams" data-i18n="team_profiles">Team Profiles</button>
+            <button class="tab" type="button" data-section="circuits" data-i18n="circuit_profiles">Circuit Profiles</button>
+          </div>
+        </div>
+        <div class="nav-group">
+          <button class="tab nav-parent" type="button">Lab</button>
+          <div class="nav-menu">
+            <button class="tab" type="button" data-section="lab" data-i18n="compatibility_lab">Compatibility Lab</button>
+            <button class="tab" type="button" data-section="what-if" data-i18n="what_if">What-If Matchups</button>
+          </div>
+        </div>
+        <div class="nav-group">
+          <button class="tab nav-parent" type="button">More</button>
+          <div class="nav-menu">
+            <button class="tab" type="button" data-section="live-race" data-i18n="live_race">Live Race</button>
+          </div>
+        </div>
       </nav>
 
       <section class="race-hero app-section race-hub-section">
@@ -66,41 +81,17 @@
         <span>Loading model metadata</span>
       </section>
 
-      <section class="synthesis-grid app-section race-hub-section" id="synthesis-cards">
-        <article>
-          <span>Explore</span>
-          <strong>Loading product pathways</strong>
-        </article>
-      </section>
-
-      <section class="schedule-panel app-section race-hub-section">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Weekend Schedule</p>
-            <h2>Session times and weather</h2>
-          </div>
-          <span class="weather-note" id="weather-note">Loading weather</span>
-        </div>
-        <div class="session-grid" id="sessions">
-          <span>Loading sessions</span>
-        </div>
-      </section>
-
       <section class="forecast-panel basic-only app-section race-hub-section">
         <div class="section-heading table-heading">
           <div>
             <p class="eyebrow">Forecast</p>
-            <h2>Barcelona-Catalunya outlook</h2>
+            <h2>Projected order</h2>
           </div>
           <span class="status" id="status"></span>
         </div>
         <div class="forecast-tabs" role="group" aria-label="Forecast type">
           <button id="qualifying-tab" class="forecast-tab active" type="button">Qualifying prediction</button>
           <button id="race-tab" class="forecast-tab" type="button">Race prediction</button>
-        </div>
-        <p class="basic-note" id="basic-note">Loading forecast context.</p>
-        <div class="state-strip" id="forecast-states">
-          <span>Loading forecast states</span>
         </div>
         <section class="table-wrap">
           <table>
@@ -121,6 +112,53 @@
             </tbody>
           </table>
         </section>
+      </section>
+
+      <section class="race-context-grid app-section race-hub-section">
+        <article class="panel forecast-explainer">
+          <p class="eyebrow">Read This First</p>
+          <h2>Forecast context</h2>
+          <p class="basic-note" id="basic-note">Loading forecast context.</p>
+        </article>
+
+        <details class="schedule-panel compact-rail" open>
+          <summary>
+            <span>
+              <b>Session weather</b>
+              <small id="weather-note">Loading weather</small>
+            </span>
+          </summary>
+          <div class="session-grid" id="sessions">
+            <span>Loading sessions</span>
+          </div>
+        </details>
+
+        <details class="methodology-panel">
+          <summary>
+            <span>
+              <b>How this forecast updates</b>
+              <small>Pre-weekend, practice, qualifying, and live-race states</small>
+            </span>
+          </summary>
+          <div class="state-strip" id="forecast-states">
+            <span>Loading forecast states</span>
+          </div>
+        </details>
+
+        <details class="insights-drawer">
+          <summary>
+            <span>
+              <b>Explore deeper tools</b>
+              <small>Profiles, circuit context, compatibility, and what-if matchups</small>
+            </span>
+          </summary>
+          <section class="synthesis-grid" id="synthesis-cards">
+            <article>
+              <span>Explore</span>
+              <strong>Loading product pathways</strong>
+            </article>
+          </section>
+        </details>
       </section>
 
       <section class="panel-grid geek-only app-section race-hub-section">
